@@ -1,0 +1,21 @@
+name: Sync World Cup results
+# Runs the fixture/result sync automatically every 30 minutes.
+# Add SUPABASE_URL, SUPABASE_SERVICE_KEY and FOOTBALL_DATA_TOKEN as
+# repository secrets (Settings > Secrets and variables > Actions).
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes
+  workflow_dispatch: {}        # lets you run it manually from the Actions tab
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node sync/sync.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          FOOTBALL_DATA_TOKEN: ${{ secrets.FOOTBALL_DATA_TOKEN }}

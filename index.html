@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>World Cup 2026 — Prediction Game</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0d1117; --card:#161b22; --line:#262d36; --txt:#e6edf3; --mut:#8b949e;
+    --accent:#22c55e; --accent2:#3b82f6; --gold:#facc15; --danger:#f87171; --radius:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+       background:var(--bg);color:var(--txt);padding-bottom:78px}
+  .wrap{max-width:560px;margin:0 auto;padding:14px}
+  h1,h2,h3{margin:0 0 8px}
+  .head{display:flex;align-items:center;justify-content:space-between;padding:14px;
+        background:linear-gradient(135deg,#1d4ed8,#16a34a);border-radius:var(--radius);margin-bottom:14px}
+  .head h1{font-size:18px}
+  .head small{color:#dbeafe;display:block;font-weight:400;font-size:12px}
+  .who{font-size:12px;background:rgba(0,0,0,.25);padding:5px 10px;border-radius:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+        padding:14px;margin-bottom:12px}
+  .meta{display:flex;justify-content:space-between;color:var(--mut);font-size:12px;margin-bottom:10px}
+  .match{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+  .team{font-weight:600;font-size:15px}
+  .team.h{text-align:right}
+  .score-in{width:46px;height:46px;text-align:center;font-size:20px;font-weight:700;
+        border-radius:10px;border:1px solid var(--line);background:#0d1117;color:var(--txt)}
+  .vs{display:flex;align-items:center;gap:6px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:20px;background:#0d1117;border:1px solid var(--line);color:var(--mut)}
+  .locked{opacity:.6}
+  .advance{display:flex;gap:6px;margin-top:10px;justify-content:center}
+  .advance button{flex:1;padding:8px;border-radius:8px;border:1px solid var(--line);
+        background:#0d1117;color:var(--mut);font-size:13px}
+  .advance button.on{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+  .save{width:100%;margin-top:10px;padding:11px;border:none;border-radius:10px;
+        background:var(--accent);color:#04210f;font-weight:700;font-size:14px}
+  .save:disabled{background:#1f2937;color:var(--mut)}
+  .pts{font-weight:700}
+  .pts.win{color:var(--accent)}.pts.exact{color:var(--gold)}.pts.miss{color:var(--mut)}
+  .result{text-align:center;font-size:13px;color:var(--mut);margin-top:8px}
+  .nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);
+       border-top:1px solid var(--line)}
+  .nav button{flex:1;padding:11px 4px;border:none;background:none;color:var(--mut);font-size:11px}
+  .nav button.on{color:var(--accent)}
+  .nav .ic{font-size:19px;display:block;margin-bottom:2px}
+  .lb{display:flex;align-items:center;padding:11px 12px;border-bottom:1px solid var(--line)}
+  .lb:last-child{border:none}
+  .rank{width:30px;font-weight:700;color:var(--mut)}
+  .lb .nm{flex:1;font-weight:600}
+  .lb .tot{font-weight:800;font-size:17px}
+  .lb .sub{font-size:11px;color:var(--mut)}
+  .lb.me{background:rgba(34,197,94,.08)}
+  .gold{color:var(--gold)}
+  input,select{font-family:inherit}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;color:var(--mut);margin-bottom:5px}
+  .field input,.field select{width:100%;padding:11px;border-radius:10px;
+        border:1px solid var(--line);background:#0d1117;color:var(--txt);font-size:15px}
+  .err{background:rgba(248,113,113,.12);color:var(--danger);padding:10px;border-radius:10px;
+       font-size:13px;margin-bottom:10px}
+  .ok{background:rgba(34,197,94,.12);color:var(--accent);padding:10px;border-radius:10px;
+      font-size:13px;margin-bottom:10px}
+  .empty{text-align:center;color:var(--mut);padding:40px 16px;font-size:14px}
+  .day-h{font-size:13px;color:var(--mut);margin:16px 4px 8px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  .center{text-align:center}
+  .logo{font-size:40px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+// ===================== CONFIG — FILL THESE IN =====================
+const SUPABASE_URL  = "https://gawwhkjlcybkfbhksdut.supabase.co";
+const SUPABASE_ANON = "sb_publishable_zm_QPfhp9LJZyLFwK7TMkg_WqoGkThE";
+// =================================================================
+
+const { useState, useEffect } = React;
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+const fmtDay = (iso) => new Date(iso).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+const within48h = (iso) => { const k=new Date(iso),n=new Date(); return k>n && k <= new Date(n.getTime()+48*3600*1000); };
+const isPast = (iso) => new Date(iso) <= new Date();
+
+function App(){
+  const [me,setMe] = useState(JSON.parse(localStorage.getItem('wc_me')||'null'));
+  const [tab,setTab] = useState('predict');
+  if(!me) return <Login onIn={(m)=>{localStorage.setItem('wc_me',JSON.stringify(m));setMe(m);}}/>;
+  return (
+    <div className="wrap">
+      <div className="head">
+        <div><h1>⚽ World Cup 2026</h1><small>Prediction Game</small></div>
+        <span className="who" onClick={()=>{if(confirm('Switch user?')){localStorage.removeItem('wc_me');setMe(null);}}}>{me.name} 🔄</span>
+      </div>
+      {tab==='predict'   && <Predict me={me}/>}
+      {tab==='results'   && <Results me={me}/>}
+      {tab==='bonus'     && <Bonus me={me}/>}
+      {tab==='board'     && <Board me={me}/>}
+      <nav className="nav">
+        <button className={tab==='predict'?'on':''} onClick={()=>setTab('predict')}><span className="ic">📝</span>Predict</button>
+        <button className={tab==='results'?'on':''} onClick={()=>setTab('results')}><span className="ic">📅</span>Matches</button>
+        <button className={tab==='bonus'?'on':''}   onClick={()=>setTab('bonus')}><span className="ic">🏆</span>Bonus</button>
+        <button className={tab==='board'?'on':''}    onClick={()=>setTab('board')}><span className="ic">📊</span>Leaderboard</button>
+      </nav>
+    </div>
+  );
+}
+
+function Login({onIn}){
+  const [name,setName]=useState(''),[err,setErr]=useState(''),[busy,setBusy]=useState(false);
+  const go=async()=>{
+    setErr('');setBusy(true);
+    const {data,error}=await db.from('members').select('id,name').ilike('name',name.trim()).maybeSingle();
+    setBusy(false);
+    if(error) return setErr(error.message);
+    if(!data) return setErr('Name not found — ask the organiser to add you.');
+    onIn(data);
+  };
+  return (
+    <div className="wrap">
+      <div className="center" style={{margin:'30px 0'}}>
+        <div className="logo">⚽</div>
+        <h1>World Cup 2026</h1>
+        <p style={{color:'var(--mut)'}}>Prediction Game</p>
+      </div>
+      <div className="card">
+        {err && <div className="err">{err}</div>}
+        <div className="field"><label>Your name</label>
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name here"
+            onKeyDown={e=>e.key==='Enter'&&name.trim()&&!busy&&go()}/></div>
+        <button className="save" onClick={go} disabled={busy||!name.trim()}>{busy?'Checking…':'Enter'}</button>
+      </div>
+    </div>
+  );
+}
+
+// -------- PREDICT: only matches kicking off in the next 48h --------
+function Predict({me}){
+  const [matches,setMatches]=useState(null),[preds,setPreds]=useState({});
+  const load=async()=>{
+    const {data:ms}=await db.from('matches').select('*').order('kickoff_at');
+    const {data:ps}=await db.from('predictions').select('*').eq('member_id',me.id);
+    const map={}; (ps||[]).forEach(p=>map[p.match_id]=p); setPreds(map);
+    setMatches((ms||[]).filter(m=>{
+      const live=m.status==='IN_PLAY'||(m.status!=='FINISHED'&&isPast(m.kickoff_at));
+      return (within48h(m.kickoff_at)&&m.status==='SCHEDULED')||live;
+    }));
+  };
+  useEffect(()=>{load();},[]);
+  if(matches===null) return <div className="empty">Loading…</div>;
+  if(!matches.length) return <div className="empty">No matches open for prediction right now.<br/>Matches open 2 days before kickoff. Check back soon! ⏰</div>;
+  return <>
+    <div style={{background:'var(--card)',border:'1px solid var(--line)',borderRadius:10,padding:'10px 14px',marginBottom:12,fontSize:13}}>
+      <div style={{color:'var(--txt)',marginBottom:4}}>⏱ Open until match kickoff</div>
+      <div style={{color:'var(--gold)'}}>🎯 Exact score = 10 pts</div>
+      <div style={{color:'var(--accent)'}}>✅ Correct result = 2 pts</div>
+    </div>
+    {matches.map(m=><MatchCard key={m.id} m={m} pred={preds[m.id]} me={me} onSaved={load}/>)}
+  </>;
+}
+
+function MatchCard({m,pred,me}){
+  const live = m.status==='IN_PLAY'||(m.status!=='FINISHED'&&isPast(m.kickoff_at));
+  const [h,setH]=useState(pred?String(pred.pred_home):''),[a,setA]=useState(pred?String(pred.pred_away):'');
+  const [adv,setAdv]=useState(pred?pred.pred_winner:null),[msg,setMsg]=useState(''),[busy,setBusy]=useState(false),[everSaved,setEverSaved]=useState(!!pred);
+  const tie = h!==''&&a!==''&&Number(h)===Number(a);
+  const winner = tie ? (m.is_knockout?adv:'DRAW') : (Number(h)>Number(a)?'HOME':'AWAY');
+  const valid = h!==''&&a!==''&&(!m.is_knockout||!tie||adv);
+  const save=async()=>{
+    setMsg('');setBusy(true);
+    const {error}=await db.from('predictions').upsert(
+      {member_id:me.id,match_id:m.id,pred_home:Number(h),pred_away:Number(a),pred_winner:winner},
+      {onConflict:'member_id,match_id'});
+    setBusy(false);
+    if(!error)setEverSaved(true);
+    setMsg(error?('⚠ '+error.message):'✓ Saved');
+    setTimeout(()=>setMsg(''),2500);
+  };
+  return (
+    <div className={`card${live?' locked':''}`}>
+      <div className="meta"><span>{m.group_name?m.group_name.replace(/_/g,' '):m.stage.replace(/_/g,' ')}</span>
+        <span>{live?<span style={{color:'var(--danger)',fontWeight:700}}>🔴 LIVE</span>:`${fmtDay(m.kickoff_at)} · ${fmtTime(m.kickoff_at)}`}</span></div>
+      <div className="match">
+        <span className="team h">{m.home_team}</span>
+        <span className="vs">
+          <input className="score-in" inputMode="numeric" disabled={live} value={h} onChange={e=>setH(e.target.value.replace(/\D/g,'').slice(0,2))}/>
+          <span style={{color:'var(--mut)'}}>:</span>
+          <input className="score-in" inputMode="numeric" disabled={live} value={a} onChange={e=>setA(e.target.value.replace(/\D/g,'').slice(0,2))}/>
+        </span>
+        <span className="team">{m.away_team}</span>
+      </div>
+      {m.is_knockout && tie && !live &&
+        <div className="advance">
+          <button className={adv==='HOME'?'on':''} onClick={()=>setAdv('HOME')}>{m.home_team} go through</button>
+          <button className={adv==='AWAY'?'on':''} onClick={()=>setAdv('AWAY')}>{m.away_team} go through</button>
+        </div>}
+      {msg && <div className={msg[0]==='✓'?'ok':'err'} style={{marginTop:10,marginBottom:0}}>{msg}</div>}
+      {!live && <button className="save" disabled={!valid||busy} onClick={save}>{busy?'Saving…':(everSaved?'Update prediction':'Save prediction')}</button>}
+      {live && pred && <div className="result">Your prediction: {pred.pred_home} – {pred.pred_away}</div>}
+      {live && !pred && <div className="result" style={{color:'var(--danger)'}}>No prediction submitted</div>}
+    </div>
+  );
+}
+
+// -------- MATCHES: all fixtures, my pick & points (daily progress) --------
+function Results({me}){
+  const [matches,setMatches]=useState(null),[preds,setPreds]=useState({});
+  useEffect(()=>{(async()=>{
+    const {data:ms}=await db.from('matches').select('*').order('kickoff_at');
+    const {data:ps}=await db.from('predictions').select('*').eq('member_id',me.id);
+    const map={};(ps||[]).forEach(p=>map[p.match_id]=p);setPreds(map);setMatches(ms||[]);
+  })();},[]);
+  if(matches===null) return <div className="empty">Loading…</div>;
+  if(!matches.length) return <div className="empty">Fixtures not loaded yet.</div>;
+  let lastDay='';
+  return <>{matches.map(m=>{
+    const d=fmtDay(m.kickoff_at),show=d!==lastDay;lastDay=d;
+    const p=preds[m.id],done=m.status==='FINISHED';
+    const cls=p&&done?(p.points>=10?'exact':p.points>0?'win':'miss'):'';
+    return <React.Fragment key={m.id}>
+      {show&&<div className="day-h">{d}</div>}
+      <div className="card">
+        <div className="meta"><span>{m.group_name?m.group_name.replace(/_/g,' '):m.stage.replace(/_/g,' ')}</span>
+          <span>{done?'FT':(isPast(m.kickoff_at)?'LIVE':fmtTime(m.kickoff_at))}</span></div>
+        <div className="match">
+          <span className="team h">{m.home_team}</span>
+          <span className="vs"><b style={{fontSize:18}}>{done?`${m.home_score} : ${m.away_score}`:'– : –'}</b></span>
+          <span className="team">{m.away_team}</span>
+        </div>
+        {p
+          ? <div className="result">You: {p.pred_home}–{p.pred_away}
+              {m.is_knockout&&p.pred_home===p.pred_away?` (${p.pred_winner==='HOME'?m.home_team:m.away_team})`:''}
+              {done&&<> · <span className={'pts '+cls}>{p.points} pts</span></>}</div>
+          : <div className="result">{isPast(m.kickoff_at)?'No prediction':'Not predicted yet'}</div>}
+      </div>
+    </React.Fragment>;
+  })}</>;
+}
+
+// -------- BONUS: champion / golden boot / golden glove --------
+function Bonus({me}){
+  const [b,setB]=useState({champion:'',golden_boot:'',golden_glove:''}),[locked,setLocked]=useState(false);
+  const [msg,setMsg]=useState(''),[busy,setBusy]=useState(false),[start,setStart]=useState(null),[everSaved,setEverSaved]=useState(false);
+  useEffect(()=>{(async()=>{
+    const {data:ms}=await db.from('settings').select('tournament_start_at').eq('id',1).single();
+    if(ms?.tournament_start_at){setStart(ms.tournament_start_at);setLocked(isPast(ms.tournament_start_at));}
+    const {data}=await db.from('bonus_predictions').select('*').eq('member_id',me.id).maybeSingle();
+    if(data){setB({champion:data.champion||'',golden_boot:data.golden_boot||'',golden_glove:data.golden_glove||''});setEverSaved(true);}
+  })();},[]);
+  const save=async()=>{setMsg('');setBusy(true);
+    const {error}=await db.from('bonus_predictions').upsert({member_id:me.id,...b},{onConflict:'member_id'});
+    setBusy(false);
+    if(!error)setEverSaved(true);
+    setMsg(error?('⚠ '+error.message):'✓ Saved');setTimeout(()=>setMsg(''),2500);
+  };
+  return (
+    <div className="card">
+      <h3>🎁 Special prizes</h3>
+      <p style={{color:'var(--mut)',fontSize:13}}>
+        {locked?'🔒 Locked — the tournament has started.':
+         start?`Lock at first kickoff: ${fmtDay(start)} ${fmtTime(start)}`:'Make your picks before the tournament starts.'}</p>
+      <p style={{color:'var(--mut)',fontSize:13,marginTop:-4}}>Get these right and you win an individual prize — separate from the main leaderboard.</p>
+      {msg&&<div className={msg[0]==='✓'?'ok':'err'}>{msg}</div>}
+      <div className="field"><label>🏆 Tournament winner</label>
+        <input disabled={locked} value={b.champion} onChange={e=>setB({...b,champion:e.target.value})} placeholder="Country"/></div>
+      <div className="field"><label>👟 Golden Boot — top scorer</label>
+        <input disabled={locked} value={b.golden_boot} onChange={e=>setB({...b,golden_boot:e.target.value})} placeholder="Player name"/></div>
+      <div className="field"><label>🧤 Golden Glove — best keeper</label>
+        <input disabled={locked} value={b.golden_glove} onChange={e=>setB({...b,golden_glove:e.target.value})} placeholder="Player name"/></div>
+      {!locked&&<button className="save" disabled={busy} onClick={save}>{busy?'Saving…':(everSaved?'Update picks':'Save picks')}</button>}
+    </div>
+  );
+}
+
+// -------- LEADERBOARD --------
+function Board({me}){
+  const [rows,setRows]=useState(null);
+  useEffect(()=>{(async()=>{const {data}=await db.from('leaderboard').select('*');setRows(data||[]);})();},[]);
+  if(rows===null) return <div className="empty">Loading…</div>;
+  if(!rows.length) return <div className="empty">No players yet.</div>;
+  return (
+    <div className="card" style={{padding:0,overflow:'hidden'}}>
+      {rows.map((r,i)=>(
+        <div className={'lb'+(r.id===me.id?' me':'')} key={r.id}>
+          <span className="rank">{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</span>
+          <span className="nm">{r.name}
+            <span className="sub"> · <span style={{color:'var(--mut)'}}>{r.matches_played} Played</span> · <span style={{color:r.matches_scored>0?'var(--accent)':'var(--mut)'}}>{r.matches_scored} Scored</span> · <span style={{color:r.exact_hits>0?'var(--gold)':'var(--mut)'}}>{r.exact_hits} Exact</span></span></span>
+          <span className="tot">{r.total_points}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
