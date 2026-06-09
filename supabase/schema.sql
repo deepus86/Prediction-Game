@@ -185,3 +185,28 @@ create policy write_preds_ins on predictions for insert with check (true);
 create policy write_preds_upd on predictions for update using (true) with check (true);
 create policy write_bonus_ins on bonus_predictions for insert with check (true);
 create policy write_bonus_upd on bonus_predictions for update using (true) with check (true);
+
+-- ============================================================
+--  LOGIN PINS  (anti-impersonation)
+--  Each member has a private PIN. The app logs in with name + PIN.
+--  PINs live in their own table that the anon key can NEVER read;
+--  login goes through verify_login(), which only returns the member
+--  on a match and never exposes the PIN itself.
+--  Load the actual PIN values separately (kept private, NOT in this file).
+-- ============================================================
+create table if not exists member_auth (
+  member_id uuid primary key references members(id) on delete cascade,
+  pin       text not null
+);
+alter table member_auth enable row level security;   -- no policies => no anon access at all
+revoke all on table member_auth from anon, authenticated;
+
+create or replace function verify_login(p_name text, p_pin text)
+returns table(id uuid, name text)
+language sql security definer set search_path = public as $$
+  select m.id, m.name
+  from members m
+  join member_auth a on a.member_id = m.id
+  where lower(m.name) = lower(p_name) and a.pin = p_pin;
+$$;
+grant execute on function verify_login(text,text) to anon, authenticated;
