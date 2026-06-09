@@ -203,17 +203,24 @@ Joins `members` LEFT JOIN `predictions`. Returns one row per member.
 | `settings` | ✅ | ❌ | ❌ | ❌ |
 | `predictions` | ✅ | ✅ | ✅ | ❌ |
 | `bonus_predictions` | ✅ | ✅ | ✅ | ❌ |
+| `member_auth` | ❌ | ❌ | ❌ | ❌ |
 
 Time-gating on writes is enforced by triggers, not RLS. RLS simply opens INSERT/UPDATE on predictions and bonus_predictions, and the triggers handle all validation.
+
+### Authentication (Name + PIN)
+- `member_auth (member_id, pin)` stores each member's private PIN. RLS is enabled with **no policies** and grants revoked, so the anon key **cannot read or write it at all**.
+- Login goes through the `verify_login(p_name, p_pin)` function (`SECURITY DEFINER`): it joins `members` + `member_auth` and returns the matching member's `id` + `name` **only on a correct match** — it never returns or exposes the PIN.
+- Kids get 2-digit PINs (stored with a leading zero, e.g. `042`); adults get 3-digit PINs. PINs are admin-assigned and shared privately. Real PIN values are **not** stored in `schema.sql`.
 
 ---
 
 ## App Features
 
 ### Login Screen
-- Single name input with placeholder "Your name here"
-- Case-insensitive lookup (`ilike`) against the `members` table
-- Session stored in `localStorage` as `wc_me` — persists across browser closes
+- **Name + PIN** inputs (PIN is numeric, max 3 digits, masked)
+- Verified via the `verify_login(name, pin)` function (case-insensitive name); the PIN is never exposed to the client
+- Session stored in `localStorage` as `wc_me_v2` — persists across browser closes (so the PIN is entered only once per device)
+- Switching user (🔄) also requires the target's PIN → blocks impersonation
 - Enter key supported; "Checking..." disabled state during fetch
 
 ### Header (all tabs)
@@ -490,6 +497,8 @@ A collapsible `CrowdPicks` section per match card showing everyone's predictions
 | 16 | Live detection — sync gap robustness | `live` now also covers matches that have kicked off but aren't FINISHED (`status==='IN_PLAY' || (status!=='FINISHED' && isPast(kickoff))`), applied in both the Predict filter and MatchCard. Shows the LIVE tag immediately at kickoff without waiting up to 30 min for the next sync to flip status to IN_PLAY |
 | 17 | **Daily Recap card** (engagement) | New `Recap` component at the top of the Predict tab — "☀️ Last Night's Damage". Shows matches finished in the last ~30h plus highlights: 🎯 Nailed it (exact scorers, "sharpshooters!/bang on!"), 🏆 Top earner (most points gained), 🦁 Boldest (widest-margin pick with dynamic reaction: …ouch 😬 / paid off 👏 / NAILED it 🤯🔥; only when margin ≥ 2), 🦆 Ducks - 0 pts (predicted but scored 0; "brutal night! 😵" when > 8). Auto-hides when no recent matches. See "Engagement Features" section. |
 | 18 | **Crowd Picks** on Matches tab (engagement) | New `CrowdPicks` component — a centered, collapsible "👥 See/Hide N picks" toggle on each match card, showing everyone's predictions in a two-column grid. Sort: leaderboard rank before kickoff → points earned after finish. "(you)" highlight + 👑 leader marker + points colour-coding once finished. Gated by two config constants (see below). |
+| 19 | Recap — full team names | Removed first-word truncation that broke multi-word countries (e.g. "South Korea" → "South"); Recap now shows full team names |
+| 20 | **Name + PIN login** (anti-impersonation) | Login (and 🔄 switch user) now requires a private per-member PIN, verified via the `verify_login()` SECURITY DEFINER function against a locked-down `member_auth` table (anon key cannot read PINs). Kids get 2-digit PINs (leading zero), adults 3-digit. Session key bumped `wc_me` → `wc_me_v2` to force a one-time re-login for everyone. Tampered `bonus_predictions` were reset. |
 
 #### Config constants (top of `index.html`)
 ```js
@@ -505,6 +514,7 @@ const CROWD_WINDOW_H = 50;          // show crowd picks only for matches within 
 | 2 | `enforce_prediction_window` — service role check | Bypass restricted to `service_role` JWT only; `anon` users cannot inflate their own points |
 | 3 | `enforce_prediction_window` — JWT null handling | Used `coalesce(nullif(...), 'service_role')` to safely handle missing JWT context (direct SQL editor) without a cast error |
 | 4 | `leaderboard` view — Played/Scored split | Added `matches_played` (predictions on finished matches) and redefined `matches_scored` to `points > 0` (predictions that earned points). View must be dropped and recreated (`drop view` + `create view`) because column rename isn't allowed via `create or replace` |
+| 5 | `member_auth` table + `verify_login()` | Added private PIN storage (RLS, no anon access, grants revoked) and a SECURITY DEFINER login function that returns a member only on a name+PIN match, never the PIN. Real PIN values loaded separately (kept out of the repo) |
 
 ---
 
