@@ -180,7 +180,6 @@ function Recap(){
     setD({recent,sharp,topName,topPts,bold,bm,spoon,nameOf,ep});
   })();},[]);
   if(!d||d.empty) return null;
-  const fn=t=>(t||'').split(' ')[0];
   const showBold=d.bold&&d.bm>=2;   // only a real gamble counts as "boldest"
   const bMatch=showBold&&d.recent.find(m=>m.id===d.bold.match_id);
   const bReact=showBold?(d.bold.points===0?' …ouch 😬':d.bold.points>=d.ep?' — and NAILED it! 🤯🔥':' — and it paid off! 👏'):'';
@@ -190,7 +189,7 @@ function Recap(){
       <div style={{fontWeight:800,fontSize:15,marginBottom:8}}>☀️ Last Night's Damage</div>
       <div style={{fontSize:13,lineHeight:1.6}}>
         {d.recent.slice(0,6).map(m=>(
-          <div key={m.id} style={{opacity:.95}}>⚽ {fn(m.home_team)} {m.home_score}–{m.away_score} {fn(m.away_team)}</div>
+          <div key={m.id} style={{opacity:.95}}>⚽ {m.home_team} {m.home_score}–{m.away_score} {m.away_team}</div>
         ))}
         {d.recent.length>6 && <div style={{opacity:.85}}>＋{d.recent.length-6} more matches</div>}
       </div>
@@ -198,7 +197,7 @@ function Recap(){
       <div style={{fontSize:13,lineHeight:1.7,marginTop:8,borderTop:'1px solid rgba(255,255,255,.25)',paddingTop:8}}>
         {d.sharp.length>0 && <div>🎯 Nailed it: <b>{d.sharp.join(', ')}</b>{d.sharp.length>1?' — sharpshooters! 🔥':' — bang on! 👌'}</div>}
         {d.topName && d.topPts>0 && <div>🏆 Top earner: <b>{d.topName}</b> (+{d.topPts} pts)</div>}
-        {showBold && <div>🦁 Boldest: <b>{d.nameOf[d.bold.member_id]}</b> {d.bold.pred_home}–{d.bold.pred_away}{bMatch?` (${fn(bMatch.home_team)} v ${fn(bMatch.away_team)})`:''}{bReact}</div>}
+        {showBold && <div>🦁 Boldest: <b>{d.nameOf[d.bold.member_id]}</b> {d.bold.pred_home}–{d.bold.pred_away}{bMatch?` (${bMatch.home_team} v ${bMatch.away_team})`:''}{bReact}</div>}
         {d.spoon.length>0 && <div>🦆 Ducks - 0 pts: <b>{d.spoon.length<=4?d.spoon.join(', '):d.spoon.length+' players'}</b>{d.spoon.length>8?' — brutal night! 😵':''}</div>}
       </div>:null}
     </div>
