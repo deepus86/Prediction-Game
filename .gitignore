@@ -10,3 +10,9 @@ npm-debug.log*
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# Local dev / preview tooling — not part of the deployed app
+server.js
+recap-test.html
+mock-*.html
+.claude/

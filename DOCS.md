@@ -440,6 +440,32 @@ from bonus_predictions b join members m on m.id = b.member_id;
 
 ---
 
+## Engagement Features
+
+These were added after launch to keep the family group active, especially given the timezone (most matches kick off after midnight locally, so people engage in the morning).
+
+### ☀️ Daily Recap (top of Predict tab)
+A `Recap` component summarising "last night". Window = matches `FINISHED` with kickoff in the last ~30h.
+- 🏁 **Results** — up to 6 matches, then "＋N more matches"
+- 🎯 **Nailed it** — exact scorers; "sharpshooters! 🔥" (plural) / "bang on! 👌" (single). Hidden if nobody hit an exact (Top earner carries it)
+- 🏆 **Top earner** — most points gained that night (independent of exacts)
+- 🦁 **Boldest** — widest goal-margin pick (≥ 2); dynamic reaction: flop → "…ouch 😬", correct result → "paid off! 👏", exact → "NAILED it! 🤯🔥"
+- 🦆 **Ducks - 0 pts** — predicted but scored 0; ≤4 names, else "N players", and "— brutal night! 😵" when > 8
+- Auto-hides entirely when no matches finished recently
+
+### 👥 Crowd Picks (Matches tab)
+A collapsible `CrowdPicks` section per match card showing everyone's predictions.
+- **Centered "👥 See/Hide N picks" toggle**, collapsed by default (keeps the page light)
+- **Two-column grid** — even ~20 players fit in ~10 rows, no inner scroll
+- **Sort:** leaderboard rank before kickoff → points earned after finish
+- **"(you)" highlight**, **👑 leader marker**, and points colour-coding (🥇 exact / 🟢 result / grey) once finished
+- **Controlled by two config constants:**
+  - `REVEAL_MODE` — `'always'` (show as soon as predicted), `'after_kickoff'` (reveal only once locked), `'off'` (never show)
+  - `CROWD_WINDOW_H` — only matches within ±this many hours of now show the picks list (default 50)
+- Trade-off: in `'always'` mode, picks are visible before kickoff (copying is possible — acceptable for a trust-based family game; flip to `'after_kickoff'` if needed)
+
+---
+
 ## Fixes & Changes Log
 
 ### `index.html`
@@ -462,6 +488,14 @@ from bonus_predictions b join members m on m.id = b.member_id;
 | 14 | Live matches in Predict tab | IN_PLAY matches now shown as locked cards with 🔴 LIVE badge, disabled inputs, and prediction summary |
 | 15 | Leaderboard — new "Played" stat | Added a "Played" count (matches settled). "Scored" was redefined to count only predictions that earned points (points > 0), so it no longer counts 0-point settled matches. Display is now "Played · Scored · Exact" |
 | 16 | Live detection — sync gap robustness | `live` now also covers matches that have kicked off but aren't FINISHED (`status==='IN_PLAY' || (status!=='FINISHED' && isPast(kickoff))`), applied in both the Predict filter and MatchCard. Shows the LIVE tag immediately at kickoff without waiting up to 30 min for the next sync to flip status to IN_PLAY |
+| 17 | **Daily Recap card** (engagement) | New `Recap` component at the top of the Predict tab — "☀️ Last Night's Damage". Shows matches finished in the last ~30h plus highlights: 🎯 Nailed it (exact scorers, "sharpshooters!/bang on!"), 🏆 Top earner (most points gained), 🦁 Boldest (widest-margin pick with dynamic reaction: …ouch 😬 / paid off 👏 / NAILED it 🤯🔥; only when margin ≥ 2), 🦆 Ducks - 0 pts (predicted but scored 0; "brutal night! 😵" when > 8). Auto-hides when no recent matches. See "Engagement Features" section. |
+| 18 | **Crowd Picks** on Matches tab (engagement) | New `CrowdPicks` component — a centered, collapsible "👥 See/Hide N picks" toggle on each match card, showing everyone's predictions in a two-column grid. Sort: leaderboard rank before kickoff → points earned after finish. "(you)" highlight + 👑 leader marker + points colour-coding once finished. Gated by two config constants (see below). |
+
+#### Config constants (top of `index.html`)
+```js
+const REVEAL_MODE   = 'always';   // 'always' | 'after_kickoff' | 'off'
+const CROWD_WINDOW_H = 50;          // show crowd picks only for matches within ±this many hours of now
+```
 
 ### `supabase/schema.sql`
 

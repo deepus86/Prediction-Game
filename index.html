@@ -57,6 +57,15 @@
   .lb .sub{font-size:11px;color:var(--mut)}
   .lb.me{background:rgba(34,197,94,.08)}
   .gold{color:var(--gold)}
+  .crowd-toggle{margin-top:10px;display:inline-block;background:#0d1117;border:1px solid var(--line);color:var(--accent2);
+        border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:center}
+  .crowd-wrap{text-align:center}
+  .crowd-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
+  .crow{display:flex;align-items:center;gap:6px;padding:4px;font-size:13px;border-radius:6px}
+  .crow .nm{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .crow .sc{color:var(--mut);font-variant-numeric:tabular-nums}
+  .crow .pt{width:22px;text-align:right}
+  .crow.me{background:rgba(34,197,94,.10)}
   input,select{font-family:inherit}
   .field{margin-bottom:12px}
   .field label{display:block;font-size:13px;color:var(--mut);margin-bottom:5px}
@@ -79,6 +88,9 @@
 // ===================== CONFIG — FILL THESE IN =====================
 const SUPABASE_URL  = "https://gawwhkjlcybkfbhksdut.supabase.co";
 const SUPABASE_ANON = "sb_publishable_zm_QPfhp9LJZyLFwK7TMkg_WqoGkThE";
+// ----- Crowd predictions (Matches tab) -----
+const REVEAL_MODE   = 'always';   // 'always' = show picks as soon as made | 'after_kickoff' = only once locked | 'off' = never
+const CROWD_WINDOW_H = 50;          // only show picks for matches within ±this many hours of now
 // =================================================================
 
 const { useState, useEffect } = React;
@@ -141,6 +153,58 @@ function Login({onIn}){
   );
 }
 
+// -------- DAILY RECAP: "last night" highlights, shown atop Predict --------
+function Recap(){
+  const [d,setD]=useState(null);
+  useEffect(()=>{(async()=>{
+    const since=Date.now()-30*3600*1000;   // matches finished in the last ~30h
+    const {data:ms}=await db.from('matches').select('*').eq('status','FINISHED').order('kickoff_at',{ascending:false});
+    const recent=(ms||[]).filter(m=>new Date(m.kickoff_at).getTime()>=since && m.home_score!=null);
+    if(!recent.length){setD({empty:true});return;}
+    const ids=recent.map(m=>m.id);
+    const [{data:ps},{data:mem},{data:st}]=await Promise.all([
+      db.from('predictions').select('*').in('match_id',ids),
+      db.from('members').select('id,name'),
+      db.from('settings').select('exact_points').eq('id',1).single(),
+    ]);
+    const ep=(st&&st.exact_points)||10;
+    const nameOf={}; (mem||[]).forEach(x=>nameOf[x.id]=x.name);
+    const preds=ps||[];
+    const sharp=[...new Set(preds.filter(p=>p.points===ep).map(p=>nameOf[p.member_id]).filter(Boolean))];
+    const earned={}; preds.forEach(p=>{earned[p.member_id]=(earned[p.member_id]||0)+(p.points||0);});
+    let topName=null,topPts=0;
+    Object.keys(earned).forEach(id=>{if(earned[id]>topPts){topPts=earned[id];topName=nameOf[id];}});
+    let bold=null,bm=-1;
+    preds.forEach(p=>{const g=Math.abs(p.pred_home-p.pred_away);if(g>bm){bm=g;bold=p;}});
+    const spoon=Object.keys(earned).filter(id=>earned[id]===0).map(id=>nameOf[id]).filter(Boolean);
+    setD({recent,sharp,topName,topPts,bold,bm,spoon,nameOf,ep});
+  })();},[]);
+  if(!d||d.empty) return null;
+  const fn=t=>(t||'').split(' ')[0];
+  const showBold=d.bold&&d.bm>=2;   // only a real gamble counts as "boldest"
+  const bMatch=showBold&&d.recent.find(m=>m.id===d.bold.match_id);
+  const bReact=showBold?(d.bold.points===0?' …ouch 😬':d.bold.points>=d.ep?' — and NAILED it! 🤯🔥':' — and it paid off! 👏'):'';
+  const any=d.sharp.length||(d.topName&&d.topPts>0)||showBold||d.spoon.length;
+  return (
+    <div style={{background:'linear-gradient(135deg,#1d4ed8,#16a34a)',borderRadius:14,padding:'12px 14px',marginBottom:14,color:'#fff'}}>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:8}}>☀️ Last Night's Damage</div>
+      <div style={{fontSize:13,lineHeight:1.6}}>
+        {d.recent.slice(0,6).map(m=>(
+          <div key={m.id} style={{opacity:.95}}>⚽ {fn(m.home_team)} {m.home_score}–{m.away_score} {fn(m.away_team)}</div>
+        ))}
+        {d.recent.length>6 && <div style={{opacity:.85}}>＋{d.recent.length-6} more matches</div>}
+      </div>
+      {any?
+      <div style={{fontSize:13,lineHeight:1.7,marginTop:8,borderTop:'1px solid rgba(255,255,255,.25)',paddingTop:8}}>
+        {d.sharp.length>0 && <div>🎯 Nailed it: <b>{d.sharp.join(', ')}</b>{d.sharp.length>1?' — sharpshooters! 🔥':' — bang on! 👌'}</div>}
+        {d.topName && d.topPts>0 && <div>🏆 Top earner: <b>{d.topName}</b> (+{d.topPts} pts)</div>}
+        {showBold && <div>🦁 Boldest: <b>{d.nameOf[d.bold.member_id]}</b> {d.bold.pred_home}–{d.bold.pred_away}{bMatch?` (${fn(bMatch.home_team)} v ${fn(bMatch.away_team)})`:''}{bReact}</div>}
+        {d.spoon.length>0 && <div>🦆 Ducks - 0 pts: <b>{d.spoon.length<=4?d.spoon.join(', '):d.spoon.length+' players'}</b>{d.spoon.length>8?' — brutal night! 😵':''}</div>}
+      </div>:null}
+    </div>
+  );
+}
+
 // -------- PREDICT: only matches kicking off in the next 48h --------
 function Predict({me}){
   const [matches,setMatches]=useState(null),[preds,setPreds]=useState({});
@@ -154,15 +218,20 @@ function Predict({me}){
     }));
   };
   useEffect(()=>{load();},[]);
-  if(matches===null) return <div className="empty">Loading…</div>;
-  if(!matches.length) return <div className="empty">No matches open for prediction right now.<br/>Matches open 2 days before kickoff. Check back soon! ⏰</div>;
   return <>
-    <div style={{background:'var(--card)',border:'1px solid var(--line)',borderRadius:10,padding:'10px 14px',marginBottom:12,fontSize:13}}>
-      <div style={{color:'var(--txt)',marginBottom:4}}>⏱ Open until match kickoff</div>
-      <div style={{color:'var(--gold)'}}>🎯 Exact score = 10 pts</div>
-      <div style={{color:'var(--accent)'}}>✅ Correct result = 2 pts</div>
-    </div>
-    {matches.map(m=><MatchCard key={m.id} m={m} pred={preds[m.id]} me={me} onSaved={load}/>)}
+    <Recap/>
+    {matches===null
+      ? <div className="empty">Loading…</div>
+      : !matches.length
+        ? <div className="empty">No matches open for prediction right now.<br/>Matches open 2 days before kickoff. Check back soon! ⏰</div>
+        : <>
+            <div style={{background:'var(--card)',border:'1px solid var(--line)',borderRadius:10,padding:'10px 14px',marginBottom:12,fontSize:13}}>
+              <div style={{color:'var(--txt)',marginBottom:4}}>⏱ Open until match kickoff</div>
+              <div style={{color:'var(--gold)'}}>🎯 Exact score = 10 pts</div>
+              <div style={{color:'var(--accent)'}}>✅ Correct result = 2 pts</div>
+            </div>
+            {matches.map(m=><MatchCard key={m.id} m={m} pred={preds[m.id]} me={me} onSaved={load}/>)}
+          </>}
   </>;
 }
 
@@ -209,13 +278,57 @@ function MatchCard({m,pred,me}){
   );
 }
 
+// -------- CROWD PICKS: everyone's predictions for a match (collapsible) --------
+function CrowdPicks({crowd,nameOf,rankOf,done,meId}){
+  const [open,setOpen]=useState(false);
+  if(!crowd.length) return null;
+  // Sort: by points earned (desc) once finished, else by leaderboard rank.
+  const sorted=[...crowd].sort((a,b)=>done
+    ? ((b.points||0)-(a.points||0))
+    : ((rankOf[a.member_id]||999)-(rankOf[b.member_id]||999)));
+  return (
+    <>
+      <div className="crowd-wrap">
+        <button className="crowd-toggle" onClick={()=>setOpen(o=>!o)}>👥 {open?'Hide':'See'} {crowd.length} picks {open?'▲':'▼'}</button>
+      </div>
+      {open && <div className="crowd-grid">
+        {sorted.map(p=>{
+          const mine=p.member_id===meId;
+          const cls=done?(p.points>=10?'exact':p.points>0?'win':'miss'):'';
+          return <div className={'crow'+(mine?' me':'')} key={p.member_id}>
+            <span className="nm">{rankOf[p.member_id]===1?'👑 ':''}{nameOf[p.member_id]||'?'}{mine?' (you)':''}</span>
+            <span className="sc">{p.pred_home}–{p.pred_away}</span>
+            {done?<span className="pt"><span className={'pts '+cls}>{p.points}</span></span>:null}
+          </div>;
+        })}
+      </div>}
+    </>
+  );
+}
+
 // -------- MATCHES: all fixtures, my pick & points (daily progress) --------
 function Results({me}){
   const [matches,setMatches]=useState(null),[preds,setPreds]=useState({});
+  const [crowdBy,setCrowdBy]=useState({}),[nameOf,setNameOf]=useState({}),[rankOf,setRankOf]=useState({});
+  const winMs=CROWD_WINDOW_H*3600*1000;
+  const inWindow=(iso)=>Math.abs(new Date(iso).getTime()-Date.now())<=winMs;
   useEffect(()=>{(async()=>{
     const {data:ms}=await db.from('matches').select('*').order('kickoff_at');
     const {data:ps}=await db.from('predictions').select('*').eq('member_id',me.id);
     const map={};(ps||[]).forEach(p=>map[p.match_id]=p);setPreds(map);setMatches(ms||[]);
+    if(REVEAL_MODE!=='off'){
+      const winIds=(ms||[]).filter(m=>inWindow(m.kickoff_at)).map(m=>m.id);
+      if(winIds.length){
+        const [{data:aps},{data:mem},{data:lb}]=await Promise.all([
+          db.from('predictions').select('*').in('match_id',winIds),
+          db.from('members').select('id,name'),
+          db.from('leaderboard').select('id'),
+        ]);
+        const by={};(aps||[]).forEach(p=>{(by[p.match_id]=by[p.match_id]||[]).push(p);});setCrowdBy(by);
+        const nm={};(mem||[]).forEach(x=>nm[x.id]=x.name);setNameOf(nm);
+        const rk={};(lb||[]).forEach((r,i)=>rk[r.id]=i+1);setRankOf(rk);
+      }
+    }
   })();},[]);
   if(matches===null) return <div className="empty">Loading…</div>;
   if(!matches.length) return <div className="empty">Fixtures not loaded yet.</div>;
@@ -224,6 +337,9 @@ function Results({me}){
     const d=fmtDay(m.kickoff_at),show=d!==lastDay;lastDay=d;
     const p=preds[m.id],done=m.status==='FINISHED';
     const cls=p&&done?(p.points>=10?'exact':p.points>0?'win':'miss'):'';
+    const locked=isPast(m.kickoff_at)||m.status!=='SCHEDULED';
+    const reveal=REVEAL_MODE==='always'||(REVEAL_MODE==='after_kickoff'&&locked);
+    const showCrowd=REVEAL_MODE!=='off'&&inWindow(m.kickoff_at)&&reveal;
     return <React.Fragment key={m.id}>
       {show&&<div className="day-h">{d}</div>}
       <div className="card">
@@ -239,6 +355,7 @@ function Results({me}){
               {m.is_knockout&&p.pred_home===p.pred_away?` (${p.pred_winner==='HOME'?m.home_team:m.away_team})`:''}
               {done&&<> · <span className={'pts '+cls}>{p.points} pts</span></>}</div>
           : <div className="result">{isPast(m.kickoff_at)?'No prediction':'Not predicted yet'}</div>}
+        {showCrowd && <CrowdPicks crowd={crowdBy[m.id]||[]} nameOf={nameOf} rankOf={rankOf} done={done} meId={me.id}/>}
       </div>
     </React.Fragment>;
   })}</>;
