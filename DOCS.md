@@ -49,7 +49,10 @@ A lightweight, mobile-first football prediction game for a private group of 5–
 ```
 PredictionGame/
 ├── index.html                        # The entire web app (single file)
+├── _headers                          # Netlify: no-cache on HTML (deployed alongside index.html)
 ├── server.js                         # Local dev HTTP server (port 3456)
+├── recap-test.html                   # Local Recap test harness (gitignored)
+├── deploy/                           # Throwaway drag-drop bundle: index.html + _headers (gitignored)
 ├── supabase/
 │   └── schema.sql                    # Full DB schema — run once in Supabase
 ├── sync/
@@ -388,9 +391,17 @@ The app is a single static HTML file — no build step, no package.json.
 
 **Steps:**
 1. Fill in Supabase URL and anon key at the top of the script block in `index.html`
-2. Drag only `index.html` (not the whole folder) onto https://app.netlify.com/drop
+2. Regenerate the clean bundle: copy `index.html` and `_headers` into a `deploy/` folder
+   (`mkdir -p deploy && cp index.html _headers deploy/`)
+3. Drag the **`deploy/` folder** onto https://app.netlify.com/drop
 
-> ⚠️ **Never deploy the full folder** — it contains `.env` with the secret key. Deploy `index.html` only.
+> ⚠️ **Never deploy the full project folder** — it contains `.env` with the secret key.
+> Deploy the `deploy/` bundle (just `index.html` + `_headers`).
+
+**`_headers` (caching):** sets `Cache-Control: no-cache` on the HTML so a redeploy shows up
+without anyone needing a hard refresh. It must sit at the site root, which is why we deploy the
+`deploy/` bundle (a single-file drag can't include it). The login session lives in `localStorage`
+and is unaffected by this header. The `deploy/` folder is gitignored (throwaway, regenerated each deploy).
 
 **Local preview:**
 ```bash
@@ -467,9 +478,10 @@ A collapsible `CrowdPicks` section per match card showing everyone's predictions
 - **Sort:** leaderboard rank before kickoff → points earned after finish
 - **"(you)" highlight**, **👑 leader marker**, and points colour-coding (🥇 exact / 🟢 result / grey) once finished
 - **Controlled by two config constants:**
-  - `REVEAL_MODE` — `'always'` (show as soon as predicted), `'after_kickoff'` (reveal only once locked), `'off'` (never show)
+  - `REVEAL_MODE` — `'always'` (show as soon as predicted), `'after_kickoff'` (reveal only once locked), `'off'` (never show). **Current: `'after_kickoff'`**
   - `CROWD_WINDOW_H` — only matches within ±this many hours of now show the picks list (default 50)
-- Trade-off: in `'always'` mode, picks are visible before kickoff (copying is possible — acceptable for a trust-based family game; flip to `'after_kickoff'` if needed)
+- **`after_kickoff` behaviour:** before kickoff the card shows **"👥 N predicted"** → just the *names* of who's locked in a pick (sorted by rank) + "🔒 Scores reveal at kickoff"; the actual scores appear only once the match locks. Scores for unlocked matches are **not fetched** to the client (the app queries only `member_id`), so picks can't be peeked via devtools. (A direct anon-key API call could still read them — same trust model as the rest of the app — but the app never hands over pre-kickoff scores.)
+- Trade-off: in `'always'` mode, picks are visible before kickoff (copying is possible — fine for a trust-based family game); `'after_kickoff'` avoids that while still showing participation.
 
 ---
 
@@ -499,11 +511,12 @@ A collapsible `CrowdPicks` section per match card showing everyone's predictions
 | 18 | **Crowd Picks** on Matches tab (engagement) | New `CrowdPicks` component — a centered, collapsible "👥 See/Hide N picks" toggle on each match card, showing everyone's predictions in a two-column grid. Sort: leaderboard rank before kickoff → points earned after finish. "(you)" highlight + 👑 leader marker + points colour-coding once finished. Gated by two config constants (see below). |
 | 19 | Recap — full team names | Removed first-word truncation that broke multi-word countries (e.g. "South Korea" → "South"); Recap now shows full team names |
 | 20 | **Name + PIN login** (anti-impersonation) | Login (and 🔄 switch user) now requires a private per-member PIN, verified via the `verify_login()` SECURITY DEFINER function against a locked-down `member_auth` table (anon key cannot read PINs). Kids get 2-digit PINs (leading zero), adults 3-digit. Session key bumped `wc_me` → `wc_me_v2` to force a one-time re-login for everyone. Tampered `bonus_predictions` were reset. |
+| 21 | `after_kickoff` — reveal *who*, hide *scores* | In `after_kickoff` mode, in-window matches now show a pre-kickoff teaser: **"👥 N predicted"** → names only (sorted by rank) + "🔒 Scores reveal at kickoff". Full picks appear once the match locks. Crucially, scores for not-yet-locked matches are **not fetched** to the client (the app queries only `member_id`), so picks can't be peeked via devtools. `CrowdPicks` takes a `revealScores` prop; `Results` splits the crowd fetch into full vs who-only by lock state. |
 
 #### Config constants (top of `index.html`)
 ```js
-const REVEAL_MODE   = 'always';   // 'always' | 'after_kickoff' | 'off'
-const CROWD_WINDOW_H = 50;          // show crowd picks only for matches within ±this many hours of now
+const REVEAL_MODE   = 'after_kickoff';  // 'always' | 'after_kickoff' | 'off'
+const CROWD_WINDOW_H = 50;               // show crowd picks only for matches within ±this many hours of now
 ```
 
 ### `supabase/schema.sql`
