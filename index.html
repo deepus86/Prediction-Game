@@ -94,6 +94,7 @@
 // ===================== CONFIG — FILL THESE IN =====================
 const SUPABASE_URL  = "https://gawwhkjlcybkfbhksdut.supabase.co";
 const SUPABASE_ANON = "sb_publishable_zm_QPfhp9LJZyLFwK7TMkg_WqoGkThE";
+const GROUP_NAME    = 'Party Rockerz';     // shown in the header to identify this group
 // ----- Crowd predictions (Matches tab) -----
 const REVEAL_MODE   = 'after_kickoff';   // 'always' = show picks as soon as made | 'after_kickoff' = only once locked | 'off' = never
 const CROWD_WINDOW_H = 50;          // only show picks for matches within ±this many hours of now
@@ -114,7 +115,7 @@ function App(){
   return (
     <div className="wrap">
       <div className="head">
-        <div><h1>⚽ World Cup 2026</h1><small>Prediction Game</small></div>
+        <div><h1>⚽ World Cup 2026</h1><small>{GROUP_NAME} · Prediction Game</small></div>
         <span className="who" onClick={()=>{if(confirm('Switch user?')){localStorage.removeItem('wc_me_v2');setMe(null);}}}>{me.name} 🔄</span>
       </div>
       {tab==='predict'   && <Predict me={me}/>}
