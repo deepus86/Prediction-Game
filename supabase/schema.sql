@@ -6,11 +6,16 @@
 -- ---------- 1. SETTINGS (single row of config) -------------
 create table if not exists settings (
   id                    int primary key default 1,
-  tournament_start_at   timestamptz,                 -- kickoff of the FIRST match; locks bonus picks
+  tournament_start_at   timestamptz,                 -- kickoff of the FIRST match (set by sync)
+  bonus_lock_at         timestamptz,                 -- when bonus EDITING closes; null => falls back to tournament_start_at
+  bonus_reveal_at       timestamptz,                 -- when everyone's bonus picks become visible; null => bonus_lock_at => tournament_start_at
   result_points         int  not null default 2,     -- correct winner/draw
   exact_points          int  not null default 10,    -- exact scoreline (does NOT stack with result)
   constraint single_row check (id = 1)
 );
+-- For existing databases, add the new columns (no-op if already present):
+alter table settings add column if not exists bonus_lock_at   timestamptz;
+alter table settings add column if not exists bonus_reveal_at timestamptz;
 insert into settings (id) values (1) on conflict (id) do nothing;
 
 -- ---------- 2. MEMBERS (5-20 players) ----------------------
@@ -103,14 +108,15 @@ create trigger trg_prediction_window
   before insert or update on predictions
   for each row execute function enforce_prediction_window();
 
--- Bonus picks lock the moment the tournament starts.
+-- Bonus picks lock at bonus_lock_at (falls back to tournament_start_at if unset).
+-- Keeping these separate lets the admin reopen bonus editing later (e.g. before R16).
 create or replace function enforce_bonus_window()
 returns trigger language plpgsql as $$
-declare start_at timestamptz;
+declare lock_at timestamptz;
 begin
-  select tournament_start_at into start_at from settings where id = 1;
-  if start_at is not null and now() >= start_at then
-    raise exception 'The tournament has started — bonus picks are locked.';
+  select coalesce(bonus_lock_at, tournament_start_at) into lock_at from settings where id = 1;
+  if lock_at is not null and now() >= lock_at then
+    raise exception 'Bonus picks are locked.';
   end if;
   new.updated_at := now();
   return new;

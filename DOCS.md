@@ -89,7 +89,9 @@ Singleton config table (always exactly one row, `id = 1`).
 | Column | Type | Default | Description |
 |---|---|---|---|
 | `id` | int | 1 | Primary key — constrained to always be 1 |
-| `tournament_start_at` | timestamptz | null | Kickoff of the first match — locks bonus picks |
+| `tournament_start_at` | timestamptz | null | Kickoff of the first match (set by sync) |
+| `bonus_lock_at` | timestamptz | null | When bonus **editing** closes; null → falls back to `tournament_start_at` |
+| `bonus_reveal_at` | timestamptz | null | When everyone's bonus picks become **visible**; null → `bonus_lock_at` → `tournament_start_at` |
 | `result_points` | int | 2 | Points for correct result (winner/draw) |
 | `exact_points` | int | 10 | Points for exact scoreline |
 
@@ -441,14 +443,21 @@ update settings set result_points = 2, exact_points = 10 where id = 1;
 insert into members (name) values ('NewName');
 ```
 
-### Manually lock / unlock bonus picks
+### Control bonus editing & reveal (two separate dates)
+`bonus_lock_at` controls when **editing** closes; `bonus_reveal_at` controls when **everyone's picks become visible**. Both fall back to `tournament_start_at` if null.
 ```sql
--- Lock now
-update settings set tournament_start_at = now() where id = 1;
+-- Reveal everyone's picks at Round of 32 kickoff (editing still locks at tournament start)
+update settings set bonus_reveal_at = '2026-06-28T19:00:00+00' where id = 1;
 
--- Unlock (set to future date)
-update settings set tournament_start_at = '2026-06-11 17:00:00+00' where id = 1;
+-- Surprise: reopen editing until a later date, holding the reveal until then (no copying)
+update settings set bonus_lock_at   = '2026-06-28T19:00:00+00',
+                    bonus_reveal_at = '2026-06-28T19:00:00+00' where id = 1;
+
+-- Lock editing now / unlock to a future date
+update settings set bonus_lock_at = now() where id = 1;
+update settings set bonus_lock_at = '2026-06-11 17:00:00+00' where id = 1;
 ```
+> Rule of thumb: keep **`bonus_reveal_at` ≥ `bonus_lock_at`** so picks are never revealed while editing is still open.
 
 ### Check bonus prize winners at end of tournament
 ```sql
@@ -482,6 +491,15 @@ A collapsible `CrowdPicks` section per match card showing everyone's predictions
   - `CROWD_WINDOW_H` — only matches within ±this many hours of now show the picks list (default 50)
 - **`after_kickoff` behaviour:** before kickoff the card shows **"👥 N predicted"** → just the *names* of who's locked in a pick (sorted by rank) + "🔒 Scores reveal at kickoff"; the actual scores appear only once the match locks. Scores for unlocked matches are **not fetched** to the client (the app queries only `member_id`), so picks can't be peeked via devtools. (A direct anon-key API call could still read them — same trust model as the rest of the app — but the app never hands over pre-kickoff scores.)
 - Trade-off: in `'always'` mode, picks are visible before kickoff (copying is possible — fine for a trust-based family game); `'after_kickoff'` avoids that while still showing participation.
+
+### 🎁 Bonus Picks Reveal (Bonus tab)
+An "👥 Everyone's picks" card under the bonus pick form, governed by two separate dates in `settings`:
+- **`bonus_lock_at`** — when editing closes (fallback: `tournament_start_at`)
+- **`bonus_reveal_at`** — when everyone's picks become visible (fallback: `bonus_lock_at` → `tournament_start_at`)
+- **Before reveal:** teaser — "N of M have locked in their picks" + who's done / still to pick + "🔒 reveal …". Pick *values* are **not fetched** to the client (only `member_id`), so they can't be peeked.
+- **After reveal:** full list — `Name — 🏆 Champion · 👟 Boot · 🧤 Glove`, your row highlighted, blanks show "—".
+- **Why two dates:** lets the admin lock editing at tournament start but **hold the reveal until later** (e.g. Round of 32), or run a "surprise reopen" of editing — keeping `bonus_reveal_at ≥ bonus_lock_at` avoids copying.
+- *(Future option):* record the actual champion/boot/glove to auto-tick correct picks (✅/❌) at tournament end.
 
 ---
 
@@ -555,6 +573,7 @@ A collapsible `CrowdPicks` section per match card showing everyone's predictions
 | 19 | Recap — full team names | Removed first-word truncation that broke multi-word countries (e.g. "South Korea" → "South"); Recap now shows full team names |
 | 20 | **Name + PIN login** (anti-impersonation) | Login (and 🔄 switch user) now requires a private per-member PIN, verified via the `verify_login()` SECURITY DEFINER function against a locked-down `member_auth` table (anon key cannot read PINs). Kids get 2-digit PINs (leading zero), adults 3-digit. Session key bumped `wc_me` → `wc_me_v2` to force a one-time re-login for everyone. Tampered `bonus_predictions` were reset. |
 | 21 | `after_kickoff` — reveal *who*, hide *scores* | In `after_kickoff` mode, in-window matches now show a pre-kickoff teaser: **"👥 N predicted"** → names only (sorted by rank) + "🔒 Scores reveal at kickoff". Full picks appear once the match locks. Crucially, scores for not-yet-locked matches are **not fetched** to the client (the app queries only `member_id`), so picks can't be peeked via devtools. `CrowdPicks` takes a `revealScores` prop; `Results` splits the crowd fetch into full vs who-only by lock state. |
+| 22 | **Bonus Picks Reveal** + two-date control | New "👥 Everyone's picks" card in the Bonus tab (teaser before reveal → full list after). `Bonus` now reads `bonus_lock_at` / `bonus_reveal_at` from settings (with fallbacks), so editing-lock and reveal are **independently configurable** (enables holding the reveal to Round of 32, or a surprise editing reopen). Pre-reveal fetch is who-only (no pick values sent to client). |
 
 #### Config constants (top of `index.html`)
 ```js
@@ -571,6 +590,7 @@ const CROWD_WINDOW_H = 50;               // show crowd picks only for matches wi
 | 3 | `enforce_prediction_window` — JWT null handling | Used `coalesce(nullif(...), 'service_role')` to safely handle missing JWT context (direct SQL editor) without a cast error |
 | 4 | `leaderboard` view — Played/Scored split | Added `matches_played` (predictions on finished matches) and redefined `matches_scored` to `points > 0` (predictions that earned points). View must be dropped and recreated (`drop view` + `create view`) because column rename isn't allowed via `create or replace` |
 | 5 | `member_auth` table + `verify_login()` | Added private PIN storage (RLS, no anon access, grants revoked) and a SECURITY DEFINER login function that returns a member only on a name+PIN match, never the PIN. Real PIN values loaded separately (kept out of the repo) |
+| 6 | `settings.bonus_lock_at` / `bonus_reveal_at` + trigger | Added two nullable columns to decouple bonus editing-lock from reveal. `enforce_bonus_window()` now locks at `coalesce(bonus_lock_at, tournament_start_at)`. Both default to null → unchanged behaviour until set |
 
 ---
 

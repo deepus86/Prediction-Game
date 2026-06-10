@@ -66,6 +66,12 @@
   .crow .sc{color:var(--mut);font-variant-numeric:tabular-nums}
   .crow .pt{width:22px;text-align:right}
   .crow.me{background:rgba(34,197,94,.10)}
+  .ep-h{font-size:13px;font-weight:700;margin:0 0 10px}
+  .brow{padding:8px 4px;border-bottom:1px solid #20262e}
+  .brow:last-child{border:none}
+  .brow.me{background:rgba(34,197,94,.10);border-radius:8px;padding-left:8px;padding-right:8px}
+  .bname{font-weight:600;font-size:14px}
+  .bpicks{color:var(--mut);font-size:13px;margin-top:2px}
   input,select{font-family:inherit}
   .field{margin-bottom:12px}
   .field label{display:block;font-size:13px;color:var(--mut);margin-bottom:5px}
@@ -380,12 +386,20 @@ function Results({me}){
 // -------- BONUS: champion / golden boot / golden glove --------
 function Bonus({me}){
   const [b,setB]=useState({champion:'',golden_boot:'',golden_glove:''}),[locked,setLocked]=useState(false);
-  const [msg,setMsg]=useState(''),[busy,setBusy]=useState(false),[start,setStart]=useState(null),[everSaved,setEverSaved]=useState(false);
+  const [msg,setMsg]=useState(''),[busy,setBusy]=useState(false),[lock,setLock]=useState(null),[everSaved,setEverSaved]=useState(false);
+  const [revealed,setRevealed]=useState(false),[revealAt,setRevealAt]=useState(null);
+  const [members,setMembers]=useState([]),[allPicks,setAllPicks]=useState([]),[whoIds,setWhoIds]=useState([]);
   useEffect(()=>{(async()=>{
-    const {data:ms}=await db.from('settings').select('tournament_start_at').eq('id',1).single();
-    if(ms?.tournament_start_at){setStart(ms.tournament_start_at);setLocked(isPast(ms.tournament_start_at));}
+    const {data:st}=await db.from('settings').select('tournament_start_at,bonus_lock_at,bonus_reveal_at').eq('id',1).single();
+    const effLock  = st?(st.bonus_lock_at||st.tournament_start_at):null;
+    const effReveal= st?(st.bonus_reveal_at||st.bonus_lock_at||st.tournament_start_at):null;
+    const lk=!!effLock&&isPast(effLock), rv=!!effReveal&&isPast(effReveal);
+    setLock(effLock);setLocked(lk);setRevealed(rv);setRevealAt(effReveal);
     const {data}=await db.from('bonus_predictions').select('*').eq('member_id',me.id).maybeSingle();
     if(data){setB({champion:data.champion||'',golden_boot:data.golden_boot||'',golden_glove:data.golden_glove||''});setEverSaved(true);}
+    const {data:mem}=await db.from('members').select('id,name');setMembers(mem||[]);
+    if(rv){ const {data:all}=await db.from('bonus_predictions').select('*'); setAllPicks(all||[]); }
+    else  { const {data:who}=await db.from('bonus_predictions').select('member_id'); setWhoIds((who||[]).map(x=>x.member_id)); }
   })();},[]);
   const save=async()=>{setMsg('');setBusy(true);
     const {error}=await db.from('bonus_predictions').upsert({member_id:me.id,...b},{onConflict:'member_id'});
@@ -393,12 +407,15 @@ function Bonus({me}){
     if(!error)setEverSaved(true);
     setMsg(error?('⚠ '+error.message):'✓ Saved');setTimeout(()=>setMsg(''),2500);
   };
+  const nameOf={}; members.forEach(m=>nameOf[m.id]=m.name);
+  const submitted=members.filter(m=>whoIds.includes(m.id)), pending=members.filter(m=>!whoIds.includes(m.id));
   return (
+    <>
     <div className="card">
       <h3>🎁 Special prizes</h3>
       <p style={{color:'var(--mut)',fontSize:13}}>
-        {locked?'🔒 Locked — the tournament has started.':
-         start?`Lock at first kickoff: ${fmtDay(start)} ${fmtTime(start)}`:'Make your picks before the tournament starts.'}</p>
+        {locked?'🔒 Locked — picks are closed.':
+         lock?`Open until: ${fmtDay(lock)} ${fmtTime(lock)}`:'Make your picks before the tournament starts.'}</p>
       <p style={{color:'var(--mut)',fontSize:13,marginTop:-4}}>Get these right and you win an individual prize — separate from the main leaderboard.</p>
       {msg&&<div className={msg[0]==='✓'?'ok':'err'}>{msg}</div>}
       <div className="field"><label>🏆 Tournament winner</label>
@@ -409,6 +426,30 @@ function Bonus({me}){
         <input disabled={locked} value={b.golden_glove} onChange={e=>setB({...b,golden_glove:e.target.value})} placeholder="Player name"/></div>
       {!locked&&<button className="save" disabled={busy} onClick={save}>{busy?'Saving…':(everSaved?'Update picks':'Save picks')}</button>}
     </div>
+
+    <div className="card">
+      <div className="ep-h">👥 Everyone's picks{revealed&&allPicks.length?<span style={{color:'var(--mut)',fontWeight:400}}> · {allPicks.length} players</span>:null}</div>
+      {revealed ? (
+        allPicks.length===0 ? <p style={{color:'var(--mut)',fontSize:13,margin:0}}>No picks were made.</p> :
+        [...allPicks].sort((x,y)=>(nameOf[x.member_id]||'').localeCompare(nameOf[y.member_id]||'')).map(p=>{
+          const mine=p.member_id===me.id;
+          return <div className={'brow'+(mine?' me':'')} key={p.member_id}>
+            <div className="bname">{nameOf[p.member_id]||'?'}{mine?' (you)':''}</div>
+            <div className="bpicks">🏆 {p.champion||'—'} · 👟 {p.golden_boot||'—'} · 🧤 {p.golden_glove||'—'}</div>
+          </div>;
+        })
+      ) : (
+        <div style={{fontSize:14,lineHeight:1.5}}>
+          <div style={{fontWeight:700,fontSize:15}}>{submitted.length} of {members.length} have locked in their picks ✅</div>
+          <div style={{color:'var(--mut)',fontSize:13,marginTop:8}}>
+            ✓ {submitted.map(m=>m.name+(m.id===me.id?' (you)':'')).join(', ')||'—'}
+            {pending.length>0 && <><br/>⏳ Still to pick: {pending.map(m=>m.name).join(', ')}</>}
+          </div>
+          <div style={{color:'var(--gold)',fontSize:12,marginTop:10}}>🔒 Everyone's picks reveal {revealAt?`on ${fmtDay(revealAt)} ${fmtTime(revealAt)}`:'when the tournament kicks off'}</div>
+        </div>
+      )}
+    </div>
+    </>
   );
 }
 
