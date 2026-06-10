@@ -1,0 +1,4 @@
+# Netlify headers — always revalidate the app HTML so updates show
+# without anyone needing a hard refresh. (localStorage login is unaffected.)
+/*
+  Cache-Control: no-cache

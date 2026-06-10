@@ -16,3 +16,6 @@ server.js
 recap-test.html
 mock-*.html
 .claude/
+
+# Throwaway drag-drop bundle (regenerated from index.html + _headers)
+deploy/

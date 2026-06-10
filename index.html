@@ -89,7 +89,7 @@
 const SUPABASE_URL  = "https://gawwhkjlcybkfbhksdut.supabase.co";
 const SUPABASE_ANON = "sb_publishable_zm_QPfhp9LJZyLFwK7TMkg_WqoGkThE";
 // ----- Crowd predictions (Matches tab) -----
-const REVEAL_MODE   = 'always';   // 'always' = show picks as soon as made | 'after_kickoff' = only once locked | 'off' = never
+const REVEAL_MODE   = 'after_kickoff';   // 'always' = show picks as soon as made | 'after_kickoff' = only once locked | 'off' = never
 const CROWD_WINDOW_H = 50;          // only show picks for matches within ±this many hours of now
 // =================================================================
 
@@ -282,29 +282,33 @@ function MatchCard({m,pred,me}){
 }
 
 // -------- CROWD PICKS: everyone's predictions for a match (collapsible) --------
-function CrowdPicks({crowd,nameOf,rankOf,done,meId}){
+function CrowdPicks({crowd,nameOf,rankOf,done,meId,revealScores}){
   const [open,setOpen]=useState(false);
   if(!crowd.length) return null;
-  // Sort: by points earned (desc) once finished, else by leaderboard rank.
-  const sorted=[...crowd].sort((a,b)=>done
+  // Sort: by points earned (desc) once finished & revealed, else by leaderboard rank.
+  const sorted=[...crowd].sort((a,b)=>(revealScores&&done)
     ? ((b.points||0)-(a.points||0))
     : ((rankOf[a.member_id]||999)-(rankOf[b.member_id]||999)));
+  const label=revealScores?`${open?'Hide':'See'} ${crowd.length} picks`:`${crowd.length} predicted`;
   return (
     <>
       <div className="crowd-wrap">
-        <button className="crowd-toggle" onClick={()=>setOpen(o=>!o)}>👥 {open?'Hide':'See'} {crowd.length} picks {open?'▲':'▼'}</button>
+        <button className="crowd-toggle" onClick={()=>setOpen(o=>!o)}>👥 {label} {open?'▲':'▼'}</button>
       </div>
-      {open && <div className="crowd-grid">
-        {sorted.map(p=>{
-          const mine=p.member_id===meId;
-          const cls=done?(p.points>=10?'exact':p.points>0?'win':'miss'):'';
-          return <div className={'crow'+(mine?' me':'')} key={p.member_id}>
-            <span className="nm">{rankOf[p.member_id]===1?'👑 ':''}{nameOf[p.member_id]||'?'}{mine?' (you)':''}</span>
-            <span className="sc">{p.pred_home}–{p.pred_away}</span>
-            {done?<span className="pt"><span className={'pts '+cls}>{p.points}</span></span>:null}
-          </div>;
-        })}
-      </div>}
+      {open && <>
+        <div className="crowd-grid">
+          {sorted.map(p=>{
+            const mine=p.member_id===meId;
+            const cls=done?(p.points>=10?'exact':p.points>0?'win':'miss'):'';
+            return <div className={'crow'+(mine?' me':'')} key={p.member_id}>
+              <span className="nm">{rankOf[p.member_id]===1?'👑 ':''}{nameOf[p.member_id]||'?'}{mine?' (you)':''}</span>
+              {revealScores && <span className="sc">{p.pred_home}–{p.pred_away}</span>}
+              {revealScores && done ? <span className="pt"><span className={'pts '+cls}>{p.points}</span></span> : null}
+            </div>;
+          })}
+        </div>
+        {!revealScores && <div style={{textAlign:'center',color:'var(--mut)',fontSize:11,marginTop:6}}>🔒 Scores reveal at kickoff</div>}
+      </>}
     </>
   );
 }
@@ -320,14 +324,23 @@ function Results({me}){
     const {data:ps}=await db.from('predictions').select('*').eq('member_id',me.id);
     const map={};(ps||[]).forEach(p=>map[p.match_id]=p);setPreds(map);setMatches(ms||[]);
     if(REVEAL_MODE!=='off'){
-      const winIds=(ms||[]).filter(m=>inWindow(m.kickoff_at)).map(m=>m.id);
-      if(winIds.length){
-        const [{data:aps},{data:mem},{data:lb}]=await Promise.all([
-          db.from('predictions').select('*').in('match_id',winIds),
+      const winMatches=(ms||[]).filter(m=>inWindow(m.kickoff_at));
+      if(winMatches.length){
+        const lockedNow=m=>isPast(m.kickoff_at)||m.status!=='SCHEDULED';
+        const reveal=m=>REVEAL_MODE==='always'||(REVEAL_MODE==='after_kickoff'&&lockedNow(m));
+        const fullIds=winMatches.filter(reveal).map(m=>m.id);          // scores allowed -> fetch full
+        const whoIds =winMatches.filter(m=>!reveal(m)).map(m=>m.id);   // pre-kickoff -> fetch only who predicted
+        const fullQ=fullIds.length?db.from('predictions').select('*').in('match_id',fullIds):Promise.resolve({data:[]});
+        const whoQ =whoIds.length ?db.from('predictions').select('member_id,match_id').in('match_id',whoIds):Promise.resolve({data:[]});
+        const [{data:apsFull},{data:apsWho},{data:mem},{data:lb}]=await Promise.all([
+          fullQ, whoQ,
           db.from('members').select('id,name'),
           db.from('leaderboard').select('id'),
         ]);
-        const by={};(aps||[]).forEach(p=>{(by[p.match_id]=by[p.match_id]||[]).push(p);});setCrowdBy(by);
+        const by={};
+        (apsFull||[]).forEach(p=>{(by[p.match_id]=by[p.match_id]||[]).push(p);});
+        (apsWho||[]).forEach(p=>{(by[p.match_id]=by[p.match_id]||[]).push(p);});
+        setCrowdBy(by);
         const nm={};(mem||[]).forEach(x=>nm[x.id]=x.name);setNameOf(nm);
         const rk={};(lb||[]).forEach((r,i)=>rk[r.id]=i+1);setRankOf(rk);
       }
@@ -341,8 +354,8 @@ function Results({me}){
     const p=preds[m.id],done=m.status==='FINISHED';
     const cls=p&&done?(p.points>=10?'exact':p.points>0?'win':'miss'):'';
     const locked=isPast(m.kickoff_at)||m.status!=='SCHEDULED';
-    const reveal=REVEAL_MODE==='always'||(REVEAL_MODE==='after_kickoff'&&locked);
-    const showCrowd=REVEAL_MODE!=='off'&&inWindow(m.kickoff_at)&&reveal;
+    const revealScores=REVEAL_MODE==='always'||(REVEAL_MODE==='after_kickoff'&&locked);
+    const showCrowd=REVEAL_MODE!=='off'&&inWindow(m.kickoff_at);
     return <React.Fragment key={m.id}>
       {show&&<div className="day-h">{d}</div>}
       <div className="card">
@@ -358,7 +371,7 @@ function Results({me}){
               {m.is_knockout&&p.pred_home===p.pred_away?` (${p.pred_winner==='HOME'?m.home_team:m.away_team})`:''}
               {done&&<> · <span className={'pts '+cls}>{p.points} pts</span></>}</div>
           : <div className="result">{isPast(m.kickoff_at)?'No prediction':'Not predicted yet'}</div>}
-        {showCrowd && <CrowdPicks crowd={crowdBy[m.id]||[]} nameOf={nameOf} rankOf={rankOf} done={done} meId={me.id}/>}
+        {showCrowd && <CrowdPicks crowd={crowdBy[m.id]||[]} nameOf={nameOf} rankOf={rankOf} done={done} meId={me.id} revealScores={revealScores}/>}
       </div>
     </React.Fragment>;
   })}</>;
