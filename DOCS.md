@@ -485,6 +485,49 @@ A collapsible `CrowdPicks` section per match card showing everyone's predictions
 
 ---
 
+## Future Idea: Multi-League (Option 2) — Design Notes
+
+> **Status: not built.** This is a captured design discussion for if/when we want to support
+> multiple independent groups (e.g. another family or an office team) on **one** deployment.
+> The current family game is single-group and should be left untouched — any build of this
+> should happen on a **separate Supabase project**, never on the live family DB.
+
+### Ways to run more groups (the spectrum)
+| Option | Effort | Cost | When |
+|--------|--------|------|------|
+| **1. Clone** — each group runs its own copy (own Supabase + own deploy) | ~20 min | $0 (free tiers) | One extra group, simplest, **recommended first step** |
+| **2. Multi-league** — one site, many groups partitioned by `league_id` | ~1–2 days end-to-end (coding is hours; rest is review/test/deploy) | ~$0 small scale | Several groups, run as one thing |
+| **3. Public SaaS** — anyone signs up & creates groups | Weeks | ~$25–75/mo+ at scale | Only if turning it into a product |
+
+### Multi-league model (admin-controlled, **no public self-create/join**)
+- Add a `leagues` table; tag `members` / `predictions` / `bonus_predictions` / `settings` with `league_id`.
+- **`matches` stays global** — one sync serves all leagues; scoring uses shared matches + each league's predictions.
+- Scope all queries (predict, leaderboard, recap, crowd, bonus, settings) by the logged-in member's league.
+- **Membership is admin-controlled** (mirrors today): members are pre-added, so nobody self-joins and nobody can spawn a league.
+
+### Roles
+- **Operator (you):** creates leagues, appoints commissioners.
+- **Per-league commissioner:** an `is_admin` flag on members; only admins see "Add members". Lets you delegate roster management per group so you're not the bottleneck.
+
+### PIN setup in the commissioner model
+- **Chosen approach:** commissioner adds members (names + kid flags) → app **auto-generates** unique PINs (2-digit kids / 3-digit adults) → commissioner DMs them privately. Optionally add a **"change my PIN"** screen so members can set a private one afterwards.
+- **Security requirement:** writing `member_auth` from the app must go through an **admin-only `SECURITY DEFINER` function** that **re-verifies the commissioner's name+PIN** (the only path that can create members/PINs). Anyone can call it, but without valid admin creds it does nothing.
+- If self-serve admin gets heavy, **Supabase Auth (real login) for commissioners** (members stay on name+PIN) is the cleaner long-term foundation.
+
+### Member journey (recommended: pre-add, no join step)
+1. Operator creates a league + appoints a commissioner.
+2. Commissioner adds their members; app generates PINs; commissioner DMs them.
+3. Members log in with **name + PIN** → land directly in **their** league.
+4. No join step — members never choose/create a league.
+
+*(Optional self-join, not needed: commissioner shares a league code → member enters it once → tied to that league.)*
+
+### Cross-project working & memory notes
+- The family game and any Option-2 build are **separate folders + separate Supabase projects**; switching = point the tools at the other folder and use that project's keys. Fully isolated.
+- A new project/session does **not** automatically remember chat history — durable context lives in **files like this one**. Carry the relevant `DOCS.md` sections into any new project so future sessions have the reasoning.
+
+---
+
 ## Fixes & Changes Log
 
 ### `index.html`
