@@ -37,7 +37,8 @@ A lightweight, mobile-first football prediction game for a private group of 5–
 | Database / Backend | Supabase (PostgreSQL, free tier) |
 | Auth | Name-only lookup against `members` table; session in `localStorage` |
 | Styling | Pure CSS custom properties, no framework |
-| Fixture / Result data | football-data.org API v4 (free tier) |
+| Fixture data + IDs | football-data.org API v4 (free tier) — also fallback scores |
+| Timely scores | ESPN public scoreboard (free, no key) |
 | Sync runner | Node.js 18+ script — zero npm dependencies |
 | Sync scheduling | GitHub Actions (cron, every 30 minutes) |
 | Hosting | Netlify Drop or Vercel (static file, no build step) |
@@ -74,7 +75,7 @@ PredictionGame/
 | `index.html` | Self-contained React app. Contains all CSS, all component logic, and Supabase client config. No build step needed. |
 | `server.js` | Minimal Node.js HTTP server for local previewing. Not used in production. |
 | `supabase/schema.sql` | Defines all 5 tables, 2 triggers, `run_scoring()` function, `leaderboard` view, and all RLS policies. |
-| `sync/sync.js` | Fetches all WC matches from football-data.org, upserts into Supabase, updates tournament start date, runs scoring. |
+| `sync/sync.js` | Fetches fixtures from football-data.org + timely scores from ESPN, merges (never clobbers/regresses; freezes settled finals), upserts into Supabase, updates tournament start date, runs scoring. See [Sync Mechanism](#sync-mechanism). |
 | `.github/workflows/sync.yml` | Runs `sync.js` on a `*/30 * * * *` cron. Also supports manual `workflow_dispatch`. |
 | `.env.example` | Documents the 3 required env vars. Copy to `.env` and fill in for local runs. |
 | `.env` | Live secrets — `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `FOOTBALL_DATA_TOKEN`. Never committed to git. |
@@ -355,25 +356,42 @@ from bonus_predictions b join members m on m.id = b.member_id;
 
 ## Sync Mechanism
 
-**Source:** football-data.org API v4
-**Endpoint:** `GET https://api.football-data.org/v4/competitions/WC/matches`
-**Auth:** `X-Auth-Token` header
+Two data sources, by design (see "Why two sources" below):
+
+| Source | Role | Endpoint / Auth |
+|---|---|---|
+| **football-data.org** API v4 | Fixtures, kickoff times, stable match IDs, groups/stages, **fallback** scores | `GET /v4/competitions/WC/matches` · `X-Auth-Token` header |
+| **ESPN** public scoreboard (free, no key) | **Timely** score line + winner + status | `GET site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=YYYYMMDD` |
+
 **Trigger:** GitHub Actions cron `*/30 * * * *` or manual `workflow_dispatch`
+
+### Why two sources (important context)
+football-data.org's **free tier marks matches `FINISHED` quickly but delays the score line / winner for hours** — and its feed *flaps* (cached responses briefly report a finished match as `TIMED`/scheduled again). During the first WC match this left results blank. ESPN's public scoreboard publishes the final score at full-time, so it became the timely score source. football-data stays the **schedule/ID backbone and a stable fallback** — if ESPN's unofficial endpoint ever changes, scores still arrive (late) via football-data. (Verified empirically: football-data returned finished matches with `score: null`, while ESPN already had the correct `2–0`. A historical check showed football-data *does* return scores eventually — 380/380 past Premier League matches — confirming it's a lag, not a coverage gap.)
 
 ### Sync Steps (`sync/sync.js`)
 
-1. **Fetch** — One API call gets all 104 World Cup matches
-2. **Map** — Transforms API response to `matches` table shape:
-   - Status: `IN_PLAY/PAUSED → IN_PLAY`, `FINISHED → FINISHED`, else `SCHEDULED`
-   - Winner: `HOME_TEAM → HOME`, `AWAY_TEAM → AWAY`, `DRAW → DRAW`, else null
-   - `is_knockout`: true when `stage !== 'GROUP_STAGE'`
-   - Scores: only populated when FINISHED
-3. **Upsert** — Posts all rows with `resolution=merge-duplicates` (upsert on `id`)
-4. **Update settings** — Sets `tournament_start_at` to earliest `kickoff_at` found
-5. **Score** — Calls `rpc/run_scoring` to apply points to all finished matches
+1. **Fetch fixtures** — one football-data call gets all 104 matches.
+2. **Read current DB state** — `GET matches?select=id,status,home_score,away_score,winner` so we can merge instead of clobber.
+3. **Shape rows (merge against DB)** — for each match:
+   - Status uses `forwardStatus()` — only ever advances `SCHEDULED → IN_PLAY → FINISHED`, never backwards (defeats the cached-`TIMED` flap).
+   - Score/winner: take football-data's value **only if non-null**, else keep what's already stored (`null` never overwrites a known score; a manual DB entry survives).
+3b. **Enrich with ESPN** (`applyEspnScores`, wrapped in try/catch so a failure can't break the sync):
+   - Selects matches that **aren't a "settled final"** (settled = already `FINISHED` *with* a score in the DB → **frozen**, never touched again) and kicked off within the last ~4 days.
+   - ESPN buckets by **US-Eastern day**, so for each match it queries the UTC date **and the previous day** to cover the midnight boundary.
+   - Matches ESPN events to fixtures by **exact kickoff minute**, disambiguating simultaneous kickoffs by **team name** (normalized; `NAME_ALIASES` maps spelling divergences, e.g. ESPN "South Korea" ↔ football-data "Korea Republic"). Unmatched names are logged with a hint to add an alias.
+   - On an ESPN `post` (final): writes score + winner + `FINISHED`. On `in` (live): advances status to `IN_PLAY` only.
+4. **Upsert** — posts all rows with `resolution=merge-duplicates` (upsert on `id`).
+5. **Update settings** — sets `tournament_start_at` to earliest `kickoff_at` found.
+6. **Score** — calls `rpc/run_scoring` to apply points to all finished matches.
+
+**Log line to watch:** `Status → FINISHED: N, with score line: M.` plus `ESPN: filled X final score(s)…`. If `with score line` stays `0` after a match ends, ESPN didn't match (check for an `ESPN: kickoff matched but names didn't…` warning → add a `NAME_ALIASES` entry).
+
+**Module note:** `main()` runs only when invoked directly (`require.main === module`); the file also `module.exports`s `applyEspnScores`/`forwardStatus`/`canon`/`normName` for testing without DB writes.
 
 **Requirements:** Node.js 18+, no npm packages (uses built-in `fetch`)
-**Rate limits:** Free tier allows 10 calls/min; sync uses 1 call per run
+**Rate limits:** football-data free tier 10 calls/min — sync uses 1; ESPN adds 1–2 calls/run, no key/limit signup.
+
+> This `sync/sync.js` is **identical in both instances** (family `Prediction-Game` and office `Digitz_PredictionGame`) — it's fully env-var driven, no per-group code. Keep them in sync when changing either.
 
 ### Running Locally
 ```bash
@@ -427,6 +445,7 @@ node server.js
 | GitHub Actions | Free |
 | Netlify / Vercel | Free |
 | football-data.org | Free |
+| ESPN scoreboard | Free (public, no key) |
 | **Total** | **$0** |
 
 ---
