@@ -185,15 +185,32 @@ function Recap(){
     const earned={}; preds.forEach(p=>{earned[p.member_id]=(earned[p.member_id]||0)+(p.points||0);});
     let topName=null,topPts=0;
     Object.keys(earned).forEach(id=>{if(earned[id]>topPts){topPts=earned[id];topName=nameOf[id];}});
-    let bold=null,bm=-1;
-    preds.forEach(p=>{const g=Math.abs(p.pred_home-p.pred_away);if(g>bm){bm=g;bold=p;}});
+    let bm=-1;
+    preds.forEach(p=>{const g=Math.abs(p.pred_home-p.pred_away);if(g>bm)bm=g;});
+    // Boldest = everyone who made the biggest-margin call, but only a real gamble (3+ goals) qualifies.
+    const boldPicks=bm>=3?preds.filter(p=>Math.abs(p.pred_home-p.pred_away)===bm):[];
+    let bold=null;
+    if(boldPicks.length){
+      const f=boldPicks[0], cat=p=>p.points===0?'flop':(p.points>=ep?'nailed':'paid');
+      const sameScore=boldPicks.every(p=>p.pred_home===f.pred_home&&p.pred_away===f.pred_away);
+      bold={
+        names:[...new Set(boldPicks.map(p=>nameOf[p.member_id]).filter(Boolean))],
+        margin:bm,
+        pred_home:sameScore?f.pred_home:null,
+        pred_away:sameScore?f.pred_away:null,
+        match_id:boldPicks.every(p=>p.match_id===f.match_id)?f.match_id:null,
+        react:boldPicks.every(p=>cat(p)===cat(f))?cat(f):null,
+      };
+    }
     const spoon=Object.keys(earned).filter(id=>earned[id]===0).map(id=>nameOf[id]).filter(Boolean);
-    setD({recent,sharp,topName,topPts,bold,bm,spoon,nameOf,ep});
+    setD({recent,sharp,topName,topPts,bold,spoon,nameOf,ep});
   })();},[]);
   if(!d||d.empty) return null;
-  const showBold=d.bold&&d.bm>=2;   // only a real gamble counts as "boldest"
-  const bMatch=showBold&&d.recent.find(m=>m.id===d.bold.match_id);
-  const bReact=showBold?(d.bold.points===0?' …ouch 😬':d.bold.points>=d.ep?' — and NAILED it! 🤯🔥':' — and it paid off! 👏'):'';
+  const showBold=!!d.bold;   // someone made a real gamble (3+ goal margin)
+  const bMatch=showBold&&d.bold.match_id!=null&&d.recent.find(m=>m.id===d.bold.match_id);
+  const reactTxt={flop:' …ouch 😬',nailed:' — and NAILED it! 🤯🔥',paid:' — and it paid off! 👏'};
+  const bReact=showBold&&d.bold.react?reactTxt[d.bold.react]:'';
+  const bDesc=showBold?(d.bold.pred_home!=null?` ${d.bold.pred_home}–${d.bold.pred_away}`:` ${d.bold.margin}-goal calls`):'';
   const any=d.sharp.length||(d.topName&&d.topPts>0)||showBold||d.spoon.length;
   return (
     <div style={{background:'linear-gradient(135deg,#1d4ed8,#16a34a)',borderRadius:14,padding:'12px 14px',marginBottom:14,color:'#fff'}}>
@@ -208,7 +225,7 @@ function Recap(){
       <div style={{fontSize:13,lineHeight:1.7,marginTop:8,borderTop:'1px solid rgba(255,255,255,.25)',paddingTop:8}}>
         {d.sharp.length>0 && <div>🎯 Nailed it: <b>{d.sharp.join(', ')}</b>{d.sharp.length>1?' — sharpshooters! 🔥':' — bang on! 👌'}</div>}
         {d.topName && d.topPts>0 && <div>🏆 Top earner: <b>{d.topName}</b> (+{d.topPts} pts)</div>}
-        {showBold && <div>🦁 Boldest: <b>{d.nameOf[d.bold.member_id]}</b> {d.bold.pred_home}–{d.bold.pred_away}{bMatch?` (${bMatch.home_team} v ${bMatch.away_team})`:''}{bReact}</div>}
+        {showBold && <div>🦁 Boldest: <b>{d.bold.names.join(', ')}</b>{bDesc}{bMatch?` (${bMatch.home_team} v ${bMatch.away_team})`:''}{bReact}</div>}
         {d.spoon.length>0 && <div>🦆 Ducks - 0 pts: <b>{d.spoon.length<=4?d.spoon.join(', '):d.spoon.length+' players'}</b>{d.spoon.length>8?' — brutal night! 😵':''}</div>}
       </div>:null}
     </div>
