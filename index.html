@@ -183,8 +183,9 @@ function Recap(){
     const preds=ps||[];
     const sharp=[...new Set(preds.filter(p=>p.points===ep).map(p=>nameOf[p.member_id]).filter(Boolean))];
     const earned={}; preds.forEach(p=>{earned[p.member_id]=(earned[p.member_id]||0)+(p.points||0);});
-    let topName=null,topPts=0;
-    Object.keys(earned).forEach(id=>{if(earned[id]>topPts){topPts=earned[id];topName=nameOf[id];}});
+    let topPts=0; Object.values(earned).forEach(v=>{if(v>topPts)topPts=v;});
+    // Top earner = everyone tied for the highest total (no single winner when others match it).
+    const topNames=topPts>0?Object.keys(earned).filter(id=>earned[id]===topPts).map(id=>nameOf[id]).filter(Boolean):[];
     let bm=-1;
     preds.forEach(p=>{const g=Math.abs(p.pred_home-p.pred_away);if(g>bm)bm=g;});
     // Boldest = everyone who made the biggest-margin call, but only a real gamble (3+ goals) qualifies.
@@ -203,7 +204,7 @@ function Recap(){
       };
     }
     const spoon=Object.keys(earned).filter(id=>earned[id]===0).map(id=>nameOf[id]).filter(Boolean);
-    setD({recent,sharp,topName,topPts,bold,spoon,nameOf,ep});
+    setD({recent,sharp,topNames,topPts,bold,spoon,nameOf,ep});
   })();},[]);
   if(!d||d.empty) return null;
   const showBold=!!d.bold;   // someone made a real gamble (3+ goal margin)
@@ -211,7 +212,7 @@ function Recap(){
   const reactTxt={flop:' …ouch 😬',nailed:' — and NAILED it! 🤯🔥',paid:' — and it paid off! 👏'};
   const bReact=showBold&&d.bold.react?reactTxt[d.bold.react]:'';
   const bDesc=showBold?(d.bold.pred_home!=null?` ${d.bold.pred_home}–${d.bold.pred_away}`:` ${d.bold.margin}-goal calls`):'';
-  const any=d.sharp.length||(d.topName&&d.topPts>0)||showBold||d.spoon.length;
+  const any=d.sharp.length||(d.topNames.length>0&&d.topPts>0)||showBold||d.spoon.length;
   return (
     <div style={{background:'linear-gradient(135deg,#1d4ed8,#16a34a)',borderRadius:14,padding:'12px 14px',marginBottom:14,color:'#fff'}}>
       <div style={{fontWeight:800,fontSize:15,marginBottom:8}}>☀️ Last Night's Damage</div>
@@ -224,7 +225,7 @@ function Recap(){
       {any?
       <div style={{fontSize:13,lineHeight:1.7,marginTop:8,borderTop:'1px solid rgba(255,255,255,.25)',paddingTop:8}}>
         {d.sharp.length>0 && <div>🎯 Nailed it: <b>{d.sharp.join(', ')}</b>{d.sharp.length>1?' — sharpshooters! 🔥':' — bang on! 👌'}</div>}
-        {d.topName && d.topPts>0 && <div>🏆 Top earner: <b>{d.topName}</b> (+{d.topPts} pts)</div>}
+        {d.topNames.length>0 && d.topPts>0 && <div>🏆 Top earner{d.topNames.length>1?'s':''}: <b>{d.topNames.join(', ')}</b> (+{d.topPts} pts)</div>}
         {showBold && <div>🦁 Boldest: <b>{d.bold.names.join(', ')}</b>{bDesc}{bMatch?` (${bMatch.home_team} v ${bMatch.away_team})`:''}{bReact}</div>}
         {d.spoon.length>0 && <div>🦆 Ducks - 0 pts: <b>{d.spoon.length<=4?d.spoon.join(', '):d.spoon.length+' players'}</b>{d.spoon.length>8?' — brutal night! 😵':''}</div>}
       </div>:null}
@@ -325,7 +326,7 @@ function CrowdPicks({crowd,nameOf,rankOf,done,meId,revealScores}){
             const mine=p.member_id===meId;
             const cls=done?(p.points>=10?'exact':p.points>0?'win':'miss'):'';
             return <div className={'crow'+(mine?' me':'')} key={p.member_id}>
-              <span className="nm">{rankOf[p.member_id]===1?'👑 ':''}{nameOf[p.member_id]||'?'}{mine?' (you)':''}</span>
+              <span className="nm">{nameOf[p.member_id]||'?'}{mine?' (you)':''}</span>
               {revealScores && <span className="sc">{p.pred_home}–{p.pred_away}</span>}
               {revealScores && done ? <span className="pt"><span className={'pts '+cls}>{p.points}</span></span> : null}
             </div>;
@@ -481,7 +482,7 @@ function Board({me}){
     <div className="card" style={{padding:0,overflow:'hidden'}}>
       {rows.map((r,i)=>(
         <div className={'lb'+(r.id===me.id?' me':'')} key={r.id}>
-          <span className="rank">{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</span>
+          <span className="rank">{i+1}</span>
           <span className="nm">{r.name}
             <span className="sub"> · <span style={{color:'var(--mut)'}}>{r.matches_played} Played</span> · <span style={{color:r.matches_scored>0?'var(--accent)':'var(--mut)'}}>{r.matches_scored} Scored</span> · <span style={{color:r.exact_hits>0?'var(--gold)':'var(--mut)'}}>{r.exact_hits} Exact</span></span></span>
           <span className="tot">{r.total_points}</span>

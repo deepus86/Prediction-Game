@@ -298,7 +298,7 @@ from bonus_predictions b join members m on m.id = b.member_id;
 
 ### Tab: Leaderboard (📊)
 - Reads `leaderboard` view — one row per member
-- Ranks: 🥇 🥈 🥉 then numbers
+- Ranks: plain position numbers (1, 2, 3, …) — kept neutral since top-of-table ties are common
 - Sub-stats per member (shown as "Played · Scored · Exact"):
   - **Played** count — matches settled so far (grey, informational)
   - **Scored** count — predictions that earned points (points > 0) — green when > 0, grey when 0
@@ -504,7 +504,7 @@ A collapsible `CrowdPicks` section per match card showing everyone's predictions
 - **Centered "👥 See/Hide N picks" toggle**, collapsed by default (keeps the page light)
 - **Two-column grid** — even ~20 players fit in ~10 rows, no inner scroll
 - **Sort:** leaderboard rank before kickoff → points earned after finish
-- **"(you)" highlight**, **👑 leader marker**, and points colour-coding (🥇 exact / 🟢 result / grey) once finished
+- **"(you)" highlight** and points colour-coding (🥇 exact / 🟢 result / grey) once finished
 - **Controlled by two config constants:**
   - `REVEAL_MODE` — `'always'` (show as soon as predicted), `'after_kickoff'` (reveal only once locked), `'off'` (never show). **Current: `'after_kickoff'`**
   - `CROWD_WINDOW_H` — only matches within ±this many hours of now show the picks list (default 50)
