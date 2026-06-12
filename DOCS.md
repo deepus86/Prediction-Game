@@ -363,7 +363,7 @@ Two data sources, by design (see "Why two sources" below):
 | **football-data.org** API v4 | Fixtures, kickoff times, stable match IDs, groups/stages, **fallback** scores | `GET /v4/competitions/WC/matches` · `X-Auth-Token` header |
 | **ESPN** public scoreboard (free, no key) | **Timely** score line + winner + status | `GET site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=YYYYMMDD` |
 
-**Trigger:** GitHub Actions cron `*/30 * * * *` or manual `workflow_dispatch`
+**Trigger:** an external **cron-job.org** job fires every **15 min** and calls the GitHub API to run the workflow via `workflow_dispatch` (see [Auto Sync](#auto-sync-github-actions--cron-joborg) for why). The in-repo GitHub cron (`*/30 * * * *` in `sync.yml`) is kept as a backstop, and manual `workflow_dispatch` still works.
 
 ### Why two sources (important context)
 football-data.org's **free tier marks matches `FINISHED` quickly but delays the score line / winner for hours** — and its feed *flaps* (cached responses briefly report a finished match as `TIMED`/scheduled again). During the first WC match this left results blank. ESPN's public scoreboard publishes the final score at full-time, so it became the timely score source. football-data stays the **schedule/ID backbone and a stable fallback** — if ESPN's unofficial endpoint ever changes, scores still arrive (late) via football-data. (Verified empirically: football-data returned finished matches with `score: null`, while ESPN already had the correct `2–0`. A historical check showed football-data *does* return scores eventually — 380/380 past Premier League matches — confirming it's a lag, not a coverage gap.)
@@ -429,21 +429,51 @@ node server.js
 # Open http://localhost:3456
 ```
 
-### Auto Sync (GitHub Actions)
-1. Push project to a GitHub repo
+### Auto Sync (GitHub Actions + cron-job.org)
+1. Push project to a GitHub repo.
 2. Add 3 repository secrets (Settings → Secrets → Actions):
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_KEY`
    - `FOOTBALL_DATA_TOKEN`
-3. Go to Actions tab → "Sync World Cup results" → Run workflow (loads initial fixtures)
-4. Cron runs automatically every 30 minutes from then on
+3. Go to Actions tab → "Sync World Cup results" → Run workflow (loads initial fixtures).
+4. **Trigger the workflow on time with an external cron** (see below). GitHub's own
+   scheduled cron is unreliable — it queues scheduled workflows under load and can
+   delay them by **hours**, which is unacceptable for live scores. So an external
+   pinger drives it instead; the in-repo `*/30` cron stays only as a backstop.
+
+#### External trigger (cron-job.org → GitHub `workflow_dispatch`)
+1. Create a **fine-grained GitHub PAT**: *Settings → Developer settings → Fine-grained
+   tokens*. Scope to the repo(s), permission **Actions: Read and write**. Set an
+   expiry past the tournament and renew before it lapses.
+2. At **https://cron-job.org** (free, donation-funded, no paid tier), create one job per game:
+   - **URL:** `https://api.github.com/repos/<owner>/<repo>/actions/workflows/sync.yml/dispatches`
+   - **Method:** `POST` · **Body:** `{"ref":"main"}`
+   - **Headers** (do NOT use cron-job.org's "HTTP authentication" toggle — that's Basic auth, wrong for GitHub):
+     ```
+     Authorization:        Bearer <PAT>
+     Accept:               application/vnd.github+json
+     X-GitHub-Api-Version: 2022-11-28
+     Content-Type:         application/json
+     User-Agent:           cron-job-wc-sync   (GitHub 403s with no User-Agent)
+     ```
+   - **Schedule:** every 15 min. Enable email-on-failure (cron-job.org auto-disables a job after 25 straight fails).
+   - Success response from GitHub = **HTTP 204**.
+
+> **Repos are public.** Private repos on the Free plan cap GitHub Actions at 2,000
+> min/month — a 15-min cron across two repos blows past that and Actions would stop
+> mid-month. **Public repos get unlimited free Actions on standard runners**
+> (`ubuntu-latest`), so both repos were made public. This is safe here: real secrets
+> live in Actions Secrets (private even on public repos), `.env` is gitignored and was
+> never committed, and the only key in `index.html` is the *publishable* Supabase key
+> (safe behind RLS). Scan git history for secrets before making any repo public.
 
 ### Cost
 | Service | Cost |
 |---|---|
 | Supabase | Free |
-| GitHub Actions | Free |
-| Netlify / Vercel | Free |
+| GitHub Actions | Free (repos are **public** → unlimited on standard runners) |
+| Cloudflare Pages / Netlify | Free |
+| cron-job.org (external trigger) | Free |
 | football-data.org | Free |
 | ESPN scoreboard | Free (public, no key) |
 | **Total** | **$0** |
