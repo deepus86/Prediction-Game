@@ -98,6 +98,8 @@ const GROUP_NAME    = 'Party Rockerz';     // shown in the header to identify th
 // ----- Crowd predictions (Matches tab) -----
 const REVEAL_MODE   = 'after_kickoff';   // 'always' = show picks as soon as made | 'after_kickoff' = only once locked | 'off' = never
 const CROWD_WINDOW_H = 50;          // only show picks for matches within ±this many hours of now
+// ----- Daily Recap (top of Predict tab) -----
+const RECAP_WINDOW_H = 27;          // recap covers matches finished in the last ~24h (24h + ~3h max match length, since we filter by kickoff)
 // =================================================================
 
 const { useState, useEffect } = React;
@@ -168,7 +170,7 @@ function Login({onIn}){
 function Recap(){
   const [d,setD]=useState(null);
   useEffect(()=>{(async()=>{
-    const since=Date.now()-30*3600*1000;   // matches finished in the last ~30h
+    const since=Date.now()-RECAP_WINDOW_H*3600*1000;   // matches finished in the last ~24h
     const {data:ms}=await db.from('matches').select('*').eq('status','FINISHED').order('kickoff_at',{ascending:false});
     const recent=(ms||[]).filter(m=>new Date(m.kickoff_at).getTime()>=since && m.home_score!=null);
     if(!recent.length){setD({empty:true});return;}

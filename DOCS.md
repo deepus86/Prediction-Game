@@ -521,7 +521,7 @@ from bonus_predictions b join members m on m.id = b.member_id;
 These were added after launch to keep the family group active, especially given the timezone (most matches kick off after midnight locally, so people engage in the morning).
 
 ### ☀️ Daily Recap (top of Predict tab)
-A `Recap` component summarising "last night". Window = matches `FINISHED` with kickoff in the last ~30h.
+A `Recap` component summarising "last night". Window = matches `FINISHED` with kickoff in the last **`RECAP_WINDOW_H`** hours (config constant, default **27**). Why 27: the filter is anchored to *kickoff*, so to capture matches that *finished* within the last ~24h we add the max match length (90′ + ET + pens ≈ 3h) → 24 + 3 = 27. (Was 30h initially; trimmed because the extra buffer dragged in already-seen matches from the morning before, for GST viewers checking the next morning.)
 - 🏁 **Results** — up to 6 matches, then "＋N more matches"
 - 🎯 **Nailed it** — exact scorers; "sharpshooters! 🔥" (plural) / "bang on! 👌" (single). Hidden if nobody hit an exact (Top earner carries it)
 - 🏆 **Top earner** — most points gained that night (independent of exacts)
@@ -628,6 +628,7 @@ An "👥 Everyone's picks" card under the bonus pick form, governed by two separ
 ```js
 const REVEAL_MODE   = 'after_kickoff';  // 'always' | 'after_kickoff' | 'off'
 const CROWD_WINDOW_H = 50;               // show crowd picks only for matches within ±this many hours of now
+const RECAP_WINDOW_H = 27;               // Daily Recap covers matches finished in the last ~24h (24h + ~3h match length)
 ```
 
 ### `supabase/schema.sql`
