@@ -266,6 +266,9 @@ Shows matches that are:
 
 ### Tab: Matches (📅)
 Shows all 104 World Cup matches ordered by kickoff, grouped by day with date headers.
+On opening the tab it **auto-scrolls to the current day** — the first match from local
+midnight today onward (its day header is scrolled to the top); falls back to the next
+upcoming day if none today. Re-runs on each visit and after crowd-pick data loads.
 
 For each match:
 - Group/stage label

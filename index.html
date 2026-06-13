@@ -102,7 +102,7 @@ const CROWD_WINDOW_H = 50;          // only show picks for matches within ±this
 const RECAP_WINDOW_H = 27;          // recap covers matches finished in the last ~24h (24h + ~3h max match length, since we filter by kickoff)
 // =================================================================
 
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const fmtDay = (iso) => new Date(iso).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
@@ -344,6 +344,7 @@ function CrowdPicks({crowd,nameOf,rankOf,done,meId,revealScores}){
 function Results({me}){
   const [matches,setMatches]=useState(null),[preds,setPreds]=useState({});
   const [crowdBy,setCrowdBy]=useState({}),[nameOf,setNameOf]=useState({}),[rankOf,setRankOf]=useState({});
+  const dayRef=useRef(null);
   const winMs=CROWD_WINDOW_H*3600*1000;
   const inWindow=(iso)=>Math.abs(new Date(iso).getTime()-Date.now())<=winMs;
   useEffect(()=>{(async()=>{
@@ -373,9 +374,16 @@ function Results({me}){
       }
     }
   })();},[]);
+  // Auto-scroll to the current day's matches whenever the Matches tab opens.
+  useEffect(()=>{
+    if(dayRef.current) requestAnimationFrame(()=>{ if(dayRef.current) dayRef.current.scrollIntoView({block:'start'}); });
+  },[matches,crowdBy]);
   if(matches===null) return <div className="empty">Loading…</div>;
   if(!matches.length) return <div className="empty">Fixtures not loaded yet.</div>;
   let lastDay='';
+  const startToday=new Date();startToday.setHours(0,0,0,0);
+  const target=matches.find(m=>new Date(m.kickoff_at).getTime()>=startToday.getTime());
+  const targetId=target?target.id:null;
   return <>{matches.map(m=>{
     const d=fmtDay(m.kickoff_at),show=d!==lastDay;lastDay=d;
     const p=preds[m.id],done=m.status==='FINISHED';
@@ -384,7 +392,7 @@ function Results({me}){
     const revealScores=REVEAL_MODE==='always'||(REVEAL_MODE==='after_kickoff'&&locked);
     const showCrowd=REVEAL_MODE!=='off'&&inWindow(m.kickoff_at);
     return <React.Fragment key={m.id}>
-      {show&&<div className="day-h">{d}</div>}
+      {show&&<div className="day-h" ref={m.id===targetId?dayRef:undefined}>{d}</div>}
       <div className="card">
         <div className="meta"><span>{m.group_name?m.group_name.replace(/_/g,' '):m.stage.replace(/_/g,' ')}</span>
           <span>{done?'FT':(isPast(m.kickoff_at)?'LIVE':fmtTime(m.kickoff_at))}</span></div>
