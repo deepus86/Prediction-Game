@@ -21,8 +21,36 @@ if (!SUPABASE_URL || !SERVICE_KEY || !FD_TOKEN) {
   process.exit(1);
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Retry transient network blips (dropped sockets, 5xx, 429) with backoff, so one
+// flaky moment from football-data / ESPN / Supabase doesn't fail the whole run.
+// 4xx (e.g. a bad token) is returned as-is — those aren't transient, don't retry.
+async function fetchRetry(url, opts = {}, tries = 3) {
+  let lastErr;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      const r = await fetch(url, opts);
+      if ((r.status >= 500 || r.status === 429) && i < tries) {
+        console.warn(`HTTP ${r.status} from ${new URL(url).host} — retry ${i}/${tries - 1}`);
+        await sleep(1500 * i);
+        continue;
+      }
+      return r;
+    } catch (e) {
+      lastErr = e;
+      if (i < tries) {
+        console.warn(`fetch failed (${(e.cause && e.cause.code) || e.message}) from ${new URL(url).host} — retry ${i}/${tries - 1}`);
+        await sleep(1500 * i);
+        continue;
+      }
+    }
+  }
+  throw lastErr;
+}
+
 const sb = (path, opts = {}) =>
-  fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+  fetchRetry(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...opts,
     headers: {
       apikey: SERVICE_KEY,
@@ -99,7 +127,7 @@ async function applyEspnScores(rows, have) {
   // Pull each date once, pool the events (deduped by ESPN event id).
   const pool = new Map();
   for (const ds of dates) {
-    const r = await fetch(`${ESPN_URL}?dates=${ds}`);
+    const r = await fetchRetry(`${ESPN_URL}?dates=${ds}`);
     if (!r.ok) { console.warn('ESPN fetch failed', ds, r.status); continue; }
     const d = await r.json();
     for (const e of (d.events || [])) {
@@ -155,7 +183,7 @@ async function applyEspnScores(rows, have) {
 
 async function main() {
   // 1. Fetch all World Cup matches.
-  const res = await fetch('https://api.football-data.org/v4/competitions/WC/matches', {
+  const res = await fetchRetry('https://api.football-data.org/v4/competitions/WC/matches', {
     headers: { 'X-Auth-Token': FD_TOKEN },
   });
   if (!res.ok) {
