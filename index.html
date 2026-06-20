@@ -190,8 +190,8 @@ function Recap(){
     const topNames=topPts>0?Object.keys(earned).filter(id=>earned[id]===topPts).map(id=>nameOf[id]).filter(Boolean):[];
     let bm=-1;
     preds.forEach(p=>{const g=Math.abs(p.pred_home-p.pred_away);if(g>bm)bm=g;});
-    // Boldest = everyone who made the biggest-margin call, but only a real gamble (3+ goals) qualifies.
-    const boldPicks=bm>=3?preds.filter(p=>Math.abs(p.pred_home-p.pred_away)===bm):[];
+    // Boldest = everyone who made the biggest-margin call, but only a real gamble (4+ goal margin) qualifies.
+    const boldPicks=bm>=4?preds.filter(p=>Math.abs(p.pred_home-p.pred_away)===bm):[];
     let bold=null;
     if(boldPicks.length){
       const f=boldPicks[0], cat=p=>p.points===0?'flop':(p.points>=ep?'nailed':'paid');

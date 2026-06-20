@@ -528,7 +528,7 @@ A `Recap` component summarising "last night". Window = matches `FINISHED` with k
 - 🏁 **Results** — up to 6 matches, then "＋N more matches"
 - 🎯 **Nailed it** — exact scorers; "sharpshooters! 🔥" (plural) / "bang on! 👌" (single). Hidden if nobody hit an exact (Top earner carries it)
 - 🏆 **Top earner** — most points gained that night (independent of exacts)
-- 🦁 **Boldest** — widest goal-margin pick (≥ 2); dynamic reaction: flop → "…ouch 😬", correct result → "paid off! 👏", exact → "NAILED it! 🤯🔥"
+- 🦁 **Boldest** — widest goal-margin pick (**≥ 4 goal margin**, e.g. 4–0 / 5–1); all tied names shown; reaction only when their outcomes agree: flop → "…ouch 😬", correct result → "paid off! 👏", exact → "NAILED it! 🤯🔥"
 - 🦆 **Ducks - 0 pts** — predicted but scored 0; ≤4 names, else "N players", and "— brutal night! 😵" when > 8
 - Auto-hides entirely when no matches finished recently
 
