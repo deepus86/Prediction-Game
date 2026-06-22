@@ -206,7 +206,12 @@ function Recap(){
       };
     }
     const spoon=Object.keys(earned).filter(id=>earned[id]===0).map(id=>nameOf[id]).filter(Boolean);
-    setD({recent,sharp,topNames,topPts,bold,spoon,nameOf,ep});
+    // Craziest = every prediction with a 6+ goal total, listed name/score/match (sorted wildest-first).
+    const crazy=preds.filter(p=>(p.pred_home||0)+(p.pred_away||0)>=6)
+      .map(p=>({name:nameOf[p.member_id],ph:p.pred_home,pa:p.pred_away,match_id:p.match_id,total:(p.pred_home||0)+(p.pred_away||0)}))
+      .filter(x=>x.name)
+      .sort((a,b)=>b.total-a.total);
+    setD({recent,sharp,topNames,topPts,bold,crazy,spoon,nameOf,ep});
   })();},[]);
   if(!d||d.empty) return null;
   const showBold=!!d.bold;   // someone made a real gamble (3+ goal margin)
@@ -214,7 +219,7 @@ function Recap(){
   const reactTxt={flop:' …ouch 😬',nailed:' — and NAILED it! 🤯🔥',paid:' — and it paid off! 👏'};
   const bReact=showBold&&d.bold.react?reactTxt[d.bold.react]:'';
   const bDesc=showBold?(d.bold.pred_home!=null?` ${d.bold.pred_home}–${d.bold.pred_away}`:` ${d.bold.margin}-goal calls`):'';
-  const any=d.sharp.length||(d.topNames.length>0&&d.topPts>0)||showBold||d.spoon.length;
+  const any=d.sharp.length||(d.topNames.length>0&&d.topPts>0)||showBold||d.crazy.length||d.spoon.length;
   return (
     <div style={{background:'linear-gradient(135deg,#1d4ed8,#16a34a)',borderRadius:14,padding:'12px 14px',marginBottom:14,color:'#fff'}}>
       <div style={{fontWeight:800,fontSize:15,marginBottom:8}}>☀️ Last Night's Damage</div>
@@ -229,6 +234,7 @@ function Recap(){
         {d.sharp.length>0 && <div>🎯 Nailed it: <b>{d.sharp.join(', ')}</b>{d.sharp.length>1?' — sharpshooters! 🔥':' — bang on! 👌'}</div>}
         {d.topNames.length>0 && d.topPts>0 && <div>🏆 Top earner{d.topNames.length>1?'s':''}: <b>{d.topNames.join(', ')}</b> (+{d.topPts} pts)</div>}
         {showBold && <div>🦁 Boldest: <b>{d.bold.names.join(', ')}</b>{bDesc}{bMatch?` (${bMatch.home_team} v ${bMatch.away_team})`:''}{bReact}</div>}
+        {d.crazy.length>0 && <div>🤪 Craziest: {d.crazy.map((c,i)=>{const mt=d.recent.find(m=>m.id===c.match_id);return <React.Fragment key={i}>{i>0?', ':''}<b>{c.name}</b> {c.ph}–{c.pa}{mt?` (${mt.home_team} v ${mt.away_team})`:''}</React.Fragment>;})}</div>}
         {d.spoon.length>0 && <div>🦆 Ducks - 0 pts: <b>{d.spoon.length<=4?d.spoon.join(', '):d.spoon.length+' players'}</b>{d.spoon.length>8?' — brutal night! 😵':''}</div>}
       </div>:null}
     </div>

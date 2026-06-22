@@ -527,8 +527,9 @@ These were added after launch to keep the family group active, especially given 
 A `Recap` component summarising "last night". Window = matches `FINISHED` with kickoff in the last **`RECAP_WINDOW_H`** hours (config constant, default **27**). Why 27: the filter is anchored to *kickoff*, so to capture matches that *finished* within the last ~24h we add the max match length (90′ + ET + pens ≈ 3h) → 24 + 3 = 27. (Was 30h initially; trimmed because the extra buffer dragged in already-seen matches from the morning before, for GST viewers checking the next morning.)
 - 🏁 **Results** — up to 6 matches, then "＋N more matches"
 - 🎯 **Nailed it** — exact scorers; "sharpshooters! 🔥" (plural) / "bang on! 👌" (single). Hidden if nobody hit an exact (Top earner carries it)
-- 🏆 **Top earner** — most points gained that night (independent of exacts)
+- 🏆 **Top earner(s)** — everyone tied for the most points gained that night (independent of exacts)
 - 🦁 **Boldest** — widest goal-margin pick (**≥ 4 goal margin**, e.g. 4–0 / 5–1); all tied names shown; reaction only when their outcomes agree: flop → "…ouch 😬", correct result → "paid off! 👏", exact → "NAILED it! 🤯🔥"
+- 🤪 **Craziest** — every prediction with a **6+ goal total**, listed `Name score (match)`, comma-separated, sorted wildest-first. Per-prediction (one person's two crazy picks both show); can overlap with Boldest for high-margin goal-fests (5–1)
 - 🦆 **Ducks - 0 pts** — predicted but scored 0; ≤4 names, else "N players", and "— brutal night! 😵" when > 8
 - Auto-hides entirely when no matches finished recently
 
