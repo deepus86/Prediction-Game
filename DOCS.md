@@ -374,10 +374,11 @@ football-data.org's **free tier marks matches `FINISHED` quickly but delays the 
 ### Sync Steps (`sync/sync.js`)
 
 1. **Fetch fixtures** — one football-data call gets all 104 matches.
-2. **Read current DB state** — `GET matches?select=id,status,home_score,away_score,winner` so we can merge instead of clobber.
+2. **Read current DB state** — `GET matches?select=id,status,home_score,away_score,winner,home_team,away_team` so we can merge instead of clobber.
 3. **Shape rows (merge against DB)** — for each match:
    - Status uses `forwardStatus()` — only ever advances `SCHEDULED → IN_PLAY → FINISHED`, never backwards (defeats the cached-`TIMED` flap).
    - Score/winner: take football-data's value **only if non-null**, else keep what's already stored (`null` never overwrites a known score; a manual DB entry survives).
+   - **Team names:** take football-data's name **only if present**, else keep the stored name (never revert a confirmed name to `TBD`). Needed for knockouts — football-data fills knockout teams progressively as groups finish *and* flaps a confirmed team back to `null` on cached responses, which would otherwise wrongly reset it to `TBD`. Undetermined teams correctly stay `TBD` until decided.
 3b. **Enrich with ESPN** (`applyEspnScores`, wrapped in try/catch so a failure can't break the sync):
    - Selects matches that **aren't a "settled final"** (settled = already `FINISHED` *with* a score in the DB → **frozen**, never touched again) and kicked off within the last ~4 days.
    - ESPN buckets by **US-Eastern day**, so for each match it queries the UTC date **and the previous day** to cover the midnight boundary.

@@ -197,7 +197,7 @@ async function main() {
   //    football-data's free feed flaps (cached TIMED responses) and delays
   //    score/winner details for hours, so we keep the furthest-along status
   //    and any score/winner we already know — including a manual entry.
-  const cur = await sb('matches?select=id,status,home_score,away_score,winner');
+  const cur = await sb('matches?select=id,status,home_score,away_score,winner,home_team,away_team');
   const have = {};
   if (cur.ok) { (await cur.json()).forEach((r) => { have[r.id] = r; }); }
   else { console.warn('Could not read existing matches; proceeding without merge.', cur.status); }
@@ -210,8 +210,10 @@ async function main() {
       id: m.id,
       stage: m.stage,
       group_name: m.group || null,
-      home_team: m.homeTeam?.name || 'TBD',
-      away_team: m.awayTeam?.name || 'TBD',
+      // Keep a team name once known — football-data's feed flaps a confirmed
+      // knockout team back to null, which would wrongly revert it to 'TBD'.
+      home_team: m.homeTeam?.name || (prev.home_team && prev.home_team !== 'TBD' ? prev.home_team : 'TBD'),
+      away_team: m.awayTeam?.name || (prev.away_team && prev.away_team !== 'TBD' ? prev.away_team : 'TBD'),
       kickoff_at: m.utcDate,
       status: forwardStatus(prev.status, mapStatus(m.status)),
       // Take the feed's score/winner only when it actually has one;
