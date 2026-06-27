@@ -61,10 +61,11 @@
         border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;text-align:center}
   .crowd-wrap{text-align:center}
   .crowd-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:8px;border-top:1px solid var(--line);padding-top:8px}
-  .crow{display:flex;align-items:center;gap:6px;padding:4px;font-size:13px;border-radius:6px}
+  .crow{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;padding:4px;font-size:13px;border-radius:6px}
   .crow .nm{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .crow .sc{color:var(--mut);font-variant-numeric:tabular-nums}
   .crow .pt{width:22px;text-align:right}
+  .crow .adv{flex-basis:100%;color:var(--mut);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .crow.me{background:rgba(34,197,94,.10)}
   .ep-h{font-size:13px;font-weight:700;margin:0 0 10px}
   .brow{padding:8px 4px;border-bottom:1px solid #20262e}
@@ -315,7 +316,7 @@ function MatchCard({m,pred,me}){
 }
 
 // -------- CROWD PICKS: everyone's predictions for a match (collapsible) --------
-function CrowdPicks({crowd,nameOf,rankOf,done,meId,revealScores}){
+function CrowdPicks({crowd,nameOf,rankOf,done,meId,revealScores,m}){
   const [open,setOpen]=useState(false);
   if(!crowd.length) return null;
   // Sort: by points earned (desc) once finished & revealed, else by leaderboard rank.
@@ -337,6 +338,8 @@ function CrowdPicks({crowd,nameOf,rankOf,done,meId,revealScores}){
               <span className="nm">{nameOf[p.member_id]||'?'}{mine?' (you)':''}</span>
               {revealScores && <span className="sc">{p.pred_home}–{p.pred_away}</span>}
               {revealScores && done ? <span className="pt"><span className={'pts '+cls}>{p.points}</span></span> : null}
+              {revealScores && m && m.is_knockout && p.pred_home===p.pred_away && (p.pred_winner==='HOME'||p.pred_winner==='AWAY') &&
+                <span className="adv">⬆️ {p.pred_winner==='HOME'?m.home_team:m.away_team}</span>}
             </div>;
           })}
         </div>
@@ -412,7 +415,7 @@ function Results({me}){
               {m.is_knockout&&p.pred_home===p.pred_away?` (${p.pred_winner==='HOME'?m.home_team:m.away_team})`:''}
               {done&&<> · <span className={'pts '+cls}>{p.points} pts</span></>}</div>
           : <div className="result">{isPast(m.kickoff_at)?'No prediction':'Not predicted yet'}</div>}
-        {showCrowd && <CrowdPicks crowd={crowdBy[m.id]||[]} nameOf={nameOf} rankOf={rankOf} done={done} meId={me.id} revealScores={revealScores}/>}
+        {showCrowd && <CrowdPicks crowd={crowdBy[m.id]||[]} nameOf={nameOf} rankOf={rankOf} done={done} meId={me.id} revealScores={revealScores} m={m}/>}
       </div>
     </React.Fragment>;
   })}</>;
