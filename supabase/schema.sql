@@ -11,11 +11,13 @@ create table if not exists settings (
   bonus_reveal_at       timestamptz,                 -- when everyone's bonus picks become visible; null => bonus_lock_at => tournament_start_at
   result_points         int  not null default 2,     -- correct winner/draw
   exact_points          int  not null default 10,    -- exact scoreline (does NOT stack with result)
+  ko_exact_partial_points int not null default 5,    -- knockout: exact score but WRONG advancer (penalty deciders)
   constraint single_row check (id = 1)
 );
 -- For existing databases, add the new columns (no-op if already present):
 alter table settings add column if not exists bonus_lock_at   timestamptz;
 alter table settings add column if not exists bonus_reveal_at timestamptz;
+alter table settings add column if not exists ko_exact_partial_points int not null default 5;
 insert into settings (id) values (1) on conflict (id) do nothing;
 
 -- ---------- 2. MEMBERS (5-20 players) ----------------------
@@ -134,16 +136,24 @@ create trigger trg_bonus_window
 -- ============================================================
 create or replace function run_scoring()
 returns void language plpgsql security definer as $$
-declare rp int; ep int;
+declare rp int; ep int; kp int;
 begin
-  select result_points, exact_points into rp, ep from settings where id = 1;
+  select result_points, exact_points, ko_exact_partial_points into rp, ep, kp from settings where id = 1;
 
-  -- Match scoring: exact scoreline = exact_points (flat, no stacking);
-  -- else correct winner/draw = result_points; else 0.
+  -- Scoring (knockout-aware), in priority order:
+  --   exact scoreline + correct advancer        = exact_points (10)
+  --   correct winner/advancer (wrong score)      = result_points (2)
+  --   KNOCKOUT: exact scoreline, WRONG advancer  = ko_exact_partial_points (5)
+  --   else                                       = 0
+  -- Group stage: an exact score already implies the correct winner, so the
+  -- advancer clause never changes a group result (the `not is_knockout` guard).
   update predictions p set
     points = case
-      when m.home_score = p.pred_home and m.away_score = p.pred_away then ep
-      when m.winner = p.pred_winner then rp
+      when m.home_score = p.pred_home and m.away_score = p.pred_away
+           and (not m.is_knockout or m.winner = p.pred_winner)              then ep
+      when m.winner = p.pred_winner                                         then rp
+      when m.is_knockout and m.home_score = p.pred_home
+           and m.away_score = p.pred_away                                   then kp
       else 0 end,
     scored = true
   from matches m
