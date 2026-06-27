@@ -323,7 +323,19 @@ from bonus_predictions b join members m on m.id = b.member_id;
 - For knockout matches, the result is who **advances** (including extra time and penalties)
 - Points are applied automatically by `run_scoring()` after each sync run
 - `scored = true` is set alongside `points`, so unscored and 0-point predictions are distinguishable
-- Point values are configurable: `update settings set result_points=2, exact_points=10;`
+- Point values are configurable: `update settings set result_points=2, exact_points=10, ko_exact_partial_points=5;`
+
+### Knockout matches — advancer affects the exact score
+In knockouts, the **exact 10 requires the correct advancer too**, and there's a partial reward (`ko_exact_partial_points`, default **5**) for nailing the scoreline but missing the shootout winner:
+
+| Knockout outcome | Points |
+|---|---|
+| Exact score **+** correct advancer | **10** |
+| Exact score, **wrong** advancer (only possible on penalty deciders) | **5** |
+| Correct advancer, wrong score | **2** |
+| Neither | **0** |
+
+This is enforced in `run_scoring()` via `(not m.is_knockout or m.winner = p.pred_winner)` on the exact branch + a knockout-only partial branch. **Group stage is unaffected** — an exact group score already implies the correct winner, so the advancer clause never changes a group result. (Branch only ever fires on penalty deciders, because a non-draw knockout's winner is fixed by the score.)
 
 ### Knockout matches — extra time & penalties
 What the **exact scoreline (10 pts)** is matched against depends on how the match ended. This is the score the sync stores in `home_score`/`away_score` (taken from ESPN, the primary source):
