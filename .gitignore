@@ -16,6 +16,7 @@ server.js
 recap-test.html
 mock-*.html
 .claude/
+postman/
 
 # Throwaway drag-drop bundle (regenerated from index.html + _headers)
 deploy/
