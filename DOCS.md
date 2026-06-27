@@ -325,6 +325,17 @@ from bonus_predictions b join members m on m.id = b.member_id;
 - `scored = true` is set alongside `points`, so unscored and 0-point predictions are distinguishable
 - Point values are configurable: `update settings set result_points=2, exact_points=10;`
 
+### Knockout matches — extra time & penalties
+What the **exact scoreline (10 pts)** is matched against depends on how the match ended. This is the score the sync stores in `home_score`/`away_score` (taken from ESPN, the primary source):
+
+| Match ended in… | Exact-score (10 pts) is matched against | Winner (2 pts) |
+|---|---|---|
+| 90 minutes (normal) | the 90-minute score | the winner |
+| **Extra time, no penalties** | the **full score after extra time (120 min)** | the winner |
+| **Penalty shootout** | the **score when extra time ended** (the level score, e.g. 1–1) | the **shootout winner** |
+
+In short: **extra-time goals count** toward the exact score; **penalty-shootout goals do not** (you match the on-field score, e.g. 1–1, and pick who wins the shootout). ESPN reports the shootout as a separate `shootoutScore` and stays at the level score; football-data's fallback folds penalties into its full-time score (a 1–1 won 5–3 becomes `6–4`), but ESPN is the timely primary source and locks the correct value first. Verified against Euro 2024 data.
+
 ---
 
 ## Business Rules
