@@ -264,8 +264,9 @@ function Predict({me}){
         : <>
             <div style={{background:'var(--card)',border:'1px solid var(--line)',borderRadius:10,padding:'10px 14px',marginBottom:12,fontSize:13}}>
               <div style={{color:'var(--txt)',marginBottom:4}}>⏱ Open until match kickoff</div>
-              <div style={{color:'var(--gold)'}}>🎯 Exact score = 10 pts</div>
-              <div style={{color:'var(--accent)'}}>✅ Correct result = 2 pts</div>
+              <div style={{color:'var(--gold)'}}>🎯 Exact score + correct advancer = 10 pts</div>
+              <div style={{color:'#f59e0b'}}>🥅 Exact score, wrong advancer = 5 pts</div>
+              <div style={{color:'var(--accent)'}}>✅ Correct advancer only = 2 pts</div>
             </div>
             {matches.map(m=><MatchCard key={m.id} m={m} pred={preds[m.id]} me={me} onSaved={load}/>)}
           </>}
