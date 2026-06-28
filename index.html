@@ -310,7 +310,7 @@ function MatchCard({m,pred,me}){
         </div>}
       {msg && <div className={msg[0]==='✓'?'ok':'err'} style={{marginTop:10,marginBottom:0}}>{msg}</div>}
       {!live && <button className="save" disabled={!valid||busy} onClick={save}>{busy?'Saving…':(everSaved?'Update prediction':'Save prediction')}</button>}
-      {live && pred && <div className="result">Your prediction: {pred.pred_home} – {pred.pred_away}</div>}
+      {live && pred && <div className="result">Your prediction: {pred.pred_home} – {pred.pred_away}{m.is_knockout && pred.pred_home===pred.pred_away && (pred.pred_winner==='HOME'||pred.pred_winner==='AWAY') ? ` · ⬆️ ${pred.pred_winner==='HOME'?m.home_team:m.away_team}` : ''}</div>}
       {live && !pred && <div className="result" style={{color:'var(--danger)'}}>No prediction submitted</div>}
     </div>
   );
