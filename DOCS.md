@@ -346,7 +346,7 @@ What the **exact scoreline (10 pts)** is matched against depends on how the matc
 | **Extra time, no penalties** | the **full score after extra time (120 min)** | the winner |
 | **Penalty shootout** | the **score when extra time ended** (the level score, e.g. 1–1) | the **shootout winner** |
 
-In short: **extra-time goals count** toward the exact score; **penalty-shootout goals do not** (you match the on-field score, e.g. 1–1, and pick who wins the shootout). ESPN reports the shootout as a separate `shootoutScore` and stays at the level score; football-data's fallback folds penalties into its full-time score (a 1–1 won 5–3 becomes `6–4`), but ESPN is the timely primary source and locks the correct value first. Verified against Euro 2024 data.
+In short: **extra-time goals count** toward the exact score; **penalty-shootout goals do not** (you match the on-field score, e.g. 1–1, and pick who wins the shootout). ESPN reports the shootout as a separate `shootoutScore` and stays at the level score. **football-data folds the shootout into `fullTime`** (a 1–1 won 5–3 becomes `6–4`) — so `sync.js` detects `score.duration === 'PENALTY_SHOOTOUT'` and **subtracts `score.penalties` from `fullTime`** to recover the real on-field score, so a football-data refresh can't overwrite ESPN's correct value. (`extra-time` deciders need no adjustment — `fullTime` there already includes ET goals correctly.) Verified against live WC + Euro 2024 data.
 
 ---
 

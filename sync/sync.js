@@ -206,6 +206,16 @@ async function main() {
   const rows = matches.map((m) => {
     const ft = m.score?.fullTime || {};
     const prev = have[m.id] || {};
+    // football-data folds the shootout into fullTime on penalty deciders
+    // (a 1-1 won 4-3 on pens shows as 5-4). Subtract the penalties to recover
+    // the real on-field score, matching ESPN — otherwise it overwrites the
+    // correct score and scoring breaks.
+    const pen = m.score?.penalties;
+    let fh = ft.home, fa = ft.away;
+    if (m.score?.duration === 'PENALTY_SHOOTOUT' && pen && pen.home != null && pen.away != null) {
+      fh = ft.home != null ? ft.home - pen.home : null;
+      fa = ft.away != null ? ft.away - pen.away : null;
+    }
     return {
       id: m.id,
       stage: m.stage,
@@ -218,8 +228,10 @@ async function main() {
       status: forwardStatus(prev.status, mapStatus(m.status)),
       // Take the feed's score/winner only when it actually has one;
       // otherwise keep what we already stored (so null never clobbers).
-      home_score: ft.home ?? prev.home_score ?? null,
-      away_score: ft.away ?? prev.away_score ?? null,
+      // (fh/fa have penalties subtracted above, so a penalty decider stores
+      //  the real on-field score — self-heals any earlier folded value.)
+      home_score: fh ?? prev.home_score ?? null,
+      away_score: fa ?? prev.away_score ?? null,
       winner: mapWinner(m.score?.winner) ?? prev.winner ?? null,
       is_knockout: m.stage !== 'GROUP_STAGE',
     };
